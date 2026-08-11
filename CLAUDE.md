@@ -72,6 +72,25 @@ These were tested on 2026-08-11, not assumed. Re-check before contradicting them
   grants, NOT NULL counters, and the `search_vector` grant were each a production bug there;
   they are in the initial schema here. The comments in the migrations explain each one.
 
+## Deployment (Vercel)
+
+- **The framework preset must be Next.js.** It is pinned in `vercel.json` because the
+  project was originally built with the "Other" preset, whose default output directory is
+  `public/`. A Next.js app emits `.next/` and has no `public/` output, so every build
+  succeeded and then failed at hand-off with *No Output Directory named "public" found*.
+  The build log looked completely healthy right up to that last line, which made it read
+  like an infrastructure problem rather than a settings one.
+  Do **not** "fix" that error by creating an empty `public/` directory — that deploys the
+  empty directory as a static site instead of the application.
+- Only four environment variables are needed in Vercel:
+  `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
+  `SUPABASE_SECRET_KEY`, `NEXT_PUBLIC_SITE_URL`. `DATABASE_URL` and `DIRECT_URL` are read
+  only by `scripts/`, which run locally.
+- `NEXT_PUBLIC_*` values are inlined at build time, so changing one in the dashboard has no
+  effect until a rebuild.
+- `docsy.vercel.app` belongs to someone else. The production alias for this project is
+  `docsy-mukabwadm-5850s-projects.vercel.app`.
+
 ## Known gaps
 
 - Delivery emails are composed via a `mailto:` link, not sent by a service. Wiring up Resend
