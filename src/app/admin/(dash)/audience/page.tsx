@@ -136,7 +136,7 @@ export default async function AudiencePage({
               </div>
 
               <Link
-                href={`/admin/audience/preview/${key}`}
+                href={`/admin/emails/${key}`}
                 className="mt-4 inline-flex h-9 w-fit items-center gap-1.5 rounded-md border border-border px-3 font-heading text-[11px] font-bold uppercase tracking-wide text-brand-heading transition-colors hover:border-brand-cta hover:text-brand-cta"
               >
                 <MailCheck className="h-3 w-3" aria-hidden />
