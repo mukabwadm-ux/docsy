@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
-import { Search } from 'lucide-react'
+import Link from 'next/link'
 import { ProductGrid } from '@/components/product-grid'
-import { Button } from '@/components/ui/button'
-import { searchProducts } from '@/lib/queries'
+import { SearchAutocomplete } from '@/components/search-autocomplete'
+import { searchCategories, searchProducts } from '@/lib/queries'
 
 export const metadata: Metadata = {
   title: 'Search',
@@ -13,35 +13,34 @@ export const metadata: Metadata = {
 
 export default async function SearchPage({ searchParams }: { searchParams: { q?: string } }) {
   const q = searchParams.q?.trim() ?? ''
-  const results = q ? await searchProducts(q, 36) : []
+  const [results, categories] = q
+    ? await Promise.all([searchProducts(q, 36), searchCategories(q, 4)])
+    : [[], []]
 
   return (
     <div className="container py-10">
       <h1 className="text-3xl sm:text-4xl">Search</h1>
 
-      <form action="/search" method="get" className="mt-6 flex max-w-xl gap-2">
-        <label htmlFor="search-q" className="sr-only">
-          Search products
-        </label>
-        <div className="relative flex-1">
-          <Search
-            className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
-            aria-hidden
-          />
-          <input
-            id="search-q"
-            type="search"
-            name="q"
-            defaultValue={q}
-            autoFocus
-            placeholder="What are you looking for?"
-            className="h-14 w-full rounded-md border border-input bg-white pl-12 pr-4 text-[15px] text-brand-body placeholder:text-muted-foreground focus-visible:border-brand-cta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-cta/30"
-          />
+      <div className="mt-6">
+        <SearchAutocomplete variant="hero" defaultValue={q} autoFocus placeholder="What are you looking for?" />
+      </div>
+
+      {q && categories.length > 0 && (
+        <div className="mt-6 flex flex-wrap items-center gap-2">
+          <span className="font-heading text-xs font-bold uppercase tracking-wider text-brand-body/70">
+            Categories
+          </span>
+          {categories.map((c) => (
+            <Link
+              key={c.id}
+              href={`/products?category=${c.slug}`}
+              className="rounded-full border border-brand-tan bg-brand-cream px-3.5 py-1.5 font-heading text-xs font-bold uppercase tracking-wide text-brand-heading transition-colors hover:border-brand-cta hover:text-brand-cta"
+            >
+              {c.name}
+            </Link>
+          ))}
         </div>
-        <Button type="submit" variant="cta" size="lg" className="shrink-0">
-          Search
-        </Button>
-      </form>
+      )}
 
       {q && (
         <p className="mt-6 font-heading text-sm font-bold uppercase tracking-wide text-brand-body">

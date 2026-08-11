@@ -293,5 +293,65 @@ export async function searchProducts(q: string, limit = 24): Promise<Product[]> 
     .textSearch('search_vector', tsq, { config: 'english' })
     .limit(limit)
 
+  const rows = ((data as Record<string, unknown>[]) ?? []).map(normalise)
+  if (rows.length > 0) return rows
+
+  // Nothing matched the stemmed index. Fall back to a substring match on the
+  // title, which catches what tsquery structurally cannot: a mid-word fragment
+  // ("alendar"), a typo, or a hyphen split differently to how the text was
+  // indexed. `products_title_trgm_idx` is what keeps this cheap.
+  return substringSearch(q, limit)
+}
+
+/**
+ * Categories whose name matches the query.
+ *
+ * `search_vector` covers title, short_description and description — not the
+ * category a product belongs to, because a generated column cannot reach into
+ * another table. The practical effect was that searching "template" returned
+ * nothing on a shop with a category called Templates, which is the single most
+ * likely thing a visitor types.
+ *
+ * Surfacing the category as its own suggestion fixes that without a schema
+ * change, and lands the visitor somewhere better than a result list: the whole
+ * category.
+ */
+export async function searchCategories(q: string, limit = 3) {
+  const safe = q.replace(/[%_,()]/g, ' ').trim().slice(0, 40)
+  if (safe.length < 2) return []
+
+  const { data } = await publicDb
+    .from('categories')
+    .select('id, name, slug, description, icon, sort_order')
+    .ilike('name', `%${safe}%`)
+    .order('sort_order')
+    .limit(limit)
+
+  return (data as Category[]) ?? []
+}
+
+/** Everything the typeahead needs, in one round trip. */
+export async function searchSuggestions(q: string, limit = 6) {
+  const [products, categories] = await Promise.all([
+    searchProducts(q, limit),
+    searchCategories(q, 3),
+  ])
+  return { products, categories }
+}
+
+async function substringSearch(q: string, limit: number): Promise<Product[]> {
+  // A comma would be read as a filter separator by PostgREST, and % / _ are
+  // LIKE wildcards that would let input match far more than it should.
+  const safe = q.replace(/[%_,()]/g, ' ').trim().slice(0, 60)
+  if (safe.length < 2) return []
+
+  const { data } = await publicDb
+    .from('products')
+    .select(CARD_COLUMNS)
+    .eq('status', 'active')
+    .ilike('title', `%${safe}%`)
+    .order('sales_count', { ascending: false })
+    .limit(limit)
+
   return ((data as Record<string, unknown>[]) ?? []).map(normalise)
 }

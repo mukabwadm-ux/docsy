@@ -7,11 +7,11 @@ import {
   LayoutTemplate,
   Palette,
   PenTool,
-  Search,
   Sparkles,
   Zap,
 } from 'lucide-react'
 import { ProductGrid } from '@/components/product-grid'
+import { SearchAutocomplete } from '@/components/search-autocomplete'
 import { Button } from '@/components/ui/button'
 import { getCategoriesWithCounts, getFeaturedProducts, getLatestProducts } from '@/lib/queries'
 
@@ -60,27 +60,9 @@ export default async function HomePage() {
               swap your logo, ship it. Buy once, download instantly, keep it forever.
             </p>
 
-            <form action="/search" method="get" className="mt-8 flex max-w-lg gap-2">
-              <label htmlFor="hero-search" className="sr-only">
-                Search products
-              </label>
-              <div className="relative flex-1">
-                <Search
-                  className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden
-                />
-                <input
-                  id="hero-search"
-                  type="search"
-                  name="q"
-                  placeholder="Try “budget spreadsheet” or “pitch deck”"
-                  className="h-14 w-full rounded-md border border-input bg-white pl-12 pr-4 text-[15px] text-brand-body placeholder:text-muted-foreground focus-visible:border-brand-cta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-cta/30"
-                />
-              </div>
-              <Button type="submit" variant="cta" size="lg" className="shrink-0">
-                Search
-              </Button>
-            </form>
+            <div className="mt-8">
+              <SearchAutocomplete variant="hero" />
+            </div>
 
             <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-3">
               {[

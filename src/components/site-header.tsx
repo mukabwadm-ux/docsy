@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { FileText, Search } from 'lucide-react'
+import { FileText } from 'lucide-react'
+import { SearchAutocomplete } from '@/components/search-autocomplete'
 import { getCategories } from '@/lib/queries'
 
 /**
@@ -43,24 +44,9 @@ export async function SiteHeader() {
           ))}
         </nav>
 
-        <form action="/search" method="get" className="ml-auto flex items-center md:ml-0">
-          <label htmlFor="site-search" className="sr-only">
-            Search products
-          </label>
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden
-            />
-            <input
-              id="site-search"
-              type="search"
-              name="q"
-              placeholder="Search"
-              className="h-10 w-36 rounded-full border border-input bg-white pl-9 pr-3 text-sm text-brand-body placeholder:text-muted-foreground focus-visible:border-brand-cta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-cta/30 sm:w-56"
-            />
-          </div>
-        </form>
+        <div className="ml-auto md:ml-0">
+          <SearchAutocomplete variant="header" />
+        </div>
       </div>
 
       <nav className="flex gap-4 overflow-x-auto border-t border-border/70 px-4 py-2 no-scrollbar md:hidden">
