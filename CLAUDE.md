@@ -3,9 +3,11 @@
 A digital-product storefront (Payhip alternative) for selling ebooks, PDFs, templates,
 and guides. Owner uploads products, then markets them.
 
-Status: built and verified. Storefront, admin panel, manual purchase flow and demo catalog
-all working against the live database. No payment gateway yet — phase 1 is manual
-fulfilment by design. See README.md for how to run and operate it.
+Status: built and verified against the live database — storefront, conversion product
+pages, live search, resumable checkout, buyer accounts with wishlists, admin panel,
+insights, and the full email template set. No payment gateway yet; phase 1 is manual
+fulfilment by design. See README.md for how to run and operate it, and
+"Where we left off" at the bottom for the current state and what is next.
 
 Stack: Next.js 14 (App Router), TypeScript, Supabase (Postgres + Storage + Auth), Tailwind,
 lucide-react. UI primitives are shadcn-style (Radix + CVA) written into `src/components/ui`
@@ -41,9 +43,14 @@ These were tested on 2026-08-11, not assumed. Re-check before contradicting them
 3. **New-style API keys.** This project uses `sb_publishable_…` / `sb_secret_…`, not the
    legacy `anon` / `service_role` JWTs. They go in the `apikey` header the same way.
    The `sb_secret_` key bypasses RLS — server-side only.
-4. **Database is a clean slate.** No tables in `public`, no storage buckets, 0 auth
-   users. Extensions present: `pgcrypto`, `uuid-ossp`, `pg_stat_statements`,
-   `supabase_vault`, `plpgsql`.
+4. **pgcrypto lives in the `extensions` schema, not `public`.** Any SECURITY DEFINER
+   function calling `gen_random_bytes` must pin `search_path = public, extensions`.
+   Pinning to `public` alone hides it and every call fails with "function
+   gen_random_bytes(integer) does not exist" — see migration 0007, which fixed
+   exactly that in two token-minting functions.
+5. **Eight migrations are applied** (0001–0008). The database was a clean slate at
+   setup; it now holds the demo catalog, seeded reviews, and the owner's own test
+   order. `npm run db:seed -- --wipe` resets the catalog.
 
 ## Conventions
 
@@ -93,8 +100,65 @@ These were tested on 2026-08-11, not assumed. Re-check before contradicting them
 
 ## Known gaps
 
-- Delivery emails are composed via a `mailto:` link, not sent by a service. Wiring up Resend
-  is the obvious next step; `EMAIL_FROM` and `RESEND_API_KEY` are already stubbed in
-  `.env.local`.
-- No rate limiting on the review or purchase forms.
-- The `orders` table is schema-only until a real gateway is wired up.
+- **Nothing can send email** until `RESEND_API_KEY` and `EMAIL_FROM` are set. Resend is
+  fully wired — templates, one-click send from the orders queue, receipts, access links —
+  and degrades to the manual link-and-mail-client path with a banner explaining why. This
+  is the single biggest blocker: buyer accounts are created but cannot be opened without it.
+- No bulk campaign sending yet. Segments and templates exist; the sender does not.
+- No rate limiting on the review, purchase or search forms.
+- The `orders` table is schema-only until a real gateway is wired up. `manual_orders`
+  carries phase-1 orders, and revenue counts both so the total will not reset at cutover.
+- Product `description` is empty on the seeded products, so search only sees their titles
+  and one-line summaries. Real copy will noticeably improve search.
+
+## Where we left off (end of 2026-08-11)
+
+Everything below is live on `main` and verified in a browser. Twelve commits,
+`efe064a` through `f27151d`.
+
+### Built and working
+
+| Area | State |
+| --- | --- |
+| Storefront | Homepage, catalog with filters/sorts/pagination, conversion product pages, sitemap, robots, favicon set |
+| Search | Live typeahead (header, hero, search page) with category suggestions and a trigram fallback |
+| Checkout | Two steps: email on the product page, then a resumable `/checkout/[token]` order screen |
+| Buyer accounts | Auto-created on first purchase, emailed single-use link, forced password set, dashboard with re-download, wishlist, settings, one-click unsubscribe |
+| Admin | Dashboard with earnings, products CRUD, orders queue with one-click send, reviews, categories, insights, audience segments, email previews |
+| Emails | Eight templates on one shell in the site's brand and Oswald/Lora typography — previewable at `/admin/emails` |
+
+### Blocked on the owner, not on code
+
+1. **`RESEND_API_KEY` + `EMAIL_FROM` are not set.** This is the big one: no receipt,
+   no delivery email and no account access link can send, so buyer accounts exist but
+   cannot be opened. Everything degrades honestly and says so in the admin UI.
+2. **Vercel Deployment Protection is still on** — the live URL shows a Vercel login
+   to everyone except the owner.
+3. **`NEXT_PUBLIC_SITE_URL` still points at `docsy.vercel.app`**, which belongs to a
+   different project. `.env.vercel` already carries the intended value.
+4. **`docsy.imprinnt.co` is not yet added** in the Vercel dashboard. imprinnt.co is
+   already a Vercel domain, so this is mostly a two-click job — but check whether the
+   two projects are in the same Vercel scope, since a domain belongs to one account.
+5. Payment credentials are coming from the owner.
+
+### Next session
+
+- **Email campaign module.** Sending, not just templates: batching, per-recipient
+  unsubscribe tokens, a send record so nobody is mailed twice, bounce handling, and a
+  dry-run. The audience view and every template already exist; `campaign_audience`
+  applies the consent filter itself, so the sender must read from it rather than from
+  `buyer_profiles`.
+- **Google and Apple sign-in.** Supabase social providers. Two things to get right:
+  a social sign-in must create the `buyer_profiles` row (see `/account/callback`,
+  which already backfills a missing profile) and must call `claim_orders_for_user` so
+  a buyer who paid as a guest and later signs in with Google inherits their
+  purchases. Google verifies the email, so claiming is safe; set
+  `must_set_password = false` for social accounts, since there is no password to set.
+
+### Two standing decisions worth not re-litigating
+
+- **No card data ever touches this database.** Resumable checkout stores the order
+  and a token, never a card. A gateway tokenises in the browser.
+- **No passwords are emailed.** Accounts are opened with a single-use link and the
+  buyer chooses their own password. This also proves the email address, which is what
+  makes it safe to attach guest orders to the account.
