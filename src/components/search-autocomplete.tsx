@@ -27,6 +27,11 @@ interface CategoryHit {
 
 const DEBOUNCE_MS = 180
 const MIN_LENGTH = 2
+/**
+ * How long a zero-result query must sit untouched before it counts as a dead
+ * end worth recording. Long enough that it is not simply mid-word.
+ */
+const ABANDON_MS = 2000
 
 /**
  * Search box with live suggestions.
@@ -117,6 +122,33 @@ export function SearchAutocomplete({
 
     return () => clearTimeout(timer)
   }, [query])
+
+  /**
+   * Report a query that found nothing and was then left alone.
+   *
+   * This is the signal worth having: somebody wanted a thing, we did not have
+   * it, and they gave up without pressing Enter — so it never reaches the
+   * /search page where committed searches are logged. Guarded on `searched` so
+   * a query still in flight is never reported as empty.
+   */
+  useEffect(() => {
+    const trimmed = query.trim()
+    if (!searched || loading || trimmed.length < 3) return
+    if (items.length > 0 || cats.length > 0) return
+
+    const timer = setTimeout(() => {
+      // keepalive so the report still goes out if the visitor navigates away,
+      // which is the most likely thing to happen next after finding nothing.
+      void fetch('/api/search/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ q: trimmed }),
+        keepalive: true,
+      }).catch(() => undefined)
+    }, ABANDON_MS)
+
+    return () => clearTimeout(timer)
+  }, [query, searched, loading, items.length, cats.length])
 
   // Close when focus or the pointer leaves the component entirely.
   useEffect(() => {

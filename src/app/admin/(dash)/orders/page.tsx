@@ -3,6 +3,7 @@ import { DeliveryPanel } from '@/components/admin/delivery-panel'
 import { LocalTime } from '@/components/admin/local-time'
 import { EmptyState, PageHeader, StatusPill, Table, Td, Th } from '@/components/admin/ui'
 import { requireAdmin } from '@/lib/auth'
+import { EMAIL_SETUP_HINT, isEmailConfigured } from '@/lib/email'
 import { formatPrice, formatRelative } from '@/lib/format'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -27,6 +28,7 @@ export default async function AdminOrdersPage({
   searchParams: { filter?: string }
 }) {
   await requireAdmin()
+  const emailConfigured = isEmailConfigured()
   const filter = searchParams.filter === 'delivered' ? 'delivered' : searchParams.filter === 'all' ? 'all' : 'pending'
 
   let query = createAdminClient()
@@ -48,8 +50,24 @@ export default async function AdminOrdersPage({
     <>
       <PageHeader
         title="Orders"
-        subtitle="Send the file, then mark it sent. Links expire after 7 days."
+        subtitle={
+          emailConfigured
+            ? 'One click sends the file and marks the order delivered. Links expire after 7 days.'
+            : 'Send the file, then mark it sent. Links expire after 7 days.'
+        }
       />
+
+      {!emailConfigured && (
+        <div className="mb-4 rounded-lg border border-brand-tan bg-brand-cream p-4">
+          <p className="font-heading text-sm font-bold uppercase tracking-wide text-brand-heading">
+            Delivery is manual right now
+          </p>
+          <p className="mt-1 text-sm text-brand-body">
+            {EMAIL_SETUP_HINT} Until then, use <strong>Get link</strong> and your own mail client —
+            everything below still works.
+          </p>
+        </div>
+      )}
 
       <div className="mb-4 flex gap-2">
         {[
@@ -159,6 +177,8 @@ export default async function AdminOrdersPage({
                       buyerName={o.buyer_name}
                       productTitle={o.products.title}
                       delivered={o.status === 'delivered'}
+                      emailConfigured={emailConfigured}
+                      emailHint={EMAIL_SETUP_HINT}
                     />
                   ) : (
                     <span className="block text-right text-xs text-brand-body/60">

@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ProductGrid } from '@/components/product-grid'
 import { SearchAutocomplete } from '@/components/search-autocomplete'
+import { recordSearch } from '@/lib/insights'
 import { searchCategories, searchProducts } from '@/lib/queries'
 
 export const metadata: Metadata = {
@@ -16,6 +17,11 @@ export default async function SearchPage({ searchParams }: { searchParams: { q?:
   const [results, categories] = q
     ? await Promise.all([searchProducts(q, 36), searchCategories(q, 4)])
     : [[], []]
+
+  // A rendered results page is a deliberate search, so it is worth recording
+  // whatever it found. Awaited rather than fired off loose: an unawaited promise
+  // in a server component can be cut short when the response is sent.
+  if (q) await recordSearch(q, results.length)
 
   return (
     <div className="container py-10">

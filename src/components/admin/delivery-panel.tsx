@@ -2,16 +2,23 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Copy, Link2, Loader2, Mail } from 'lucide-react'
-import { getDeliveryLink, setOrderDelivered } from '@/actions/admin'
+import { Check, Copy, Link2, Loader2, Mail, Send } from 'lucide-react'
+import { getDeliveryLink, sendOrderFile, setOrderDelivered } from '@/actions/admin'
 
 /**
- * The fulfilment control for one order: mint a link, copy it, open a pre-filled
- * email, mark it delivered.
+ * Fulfilment controls for one order.
  *
- * Generating the link and marking the order delivered are separate, deliberate
- * steps. The admin needs the link before they can send anything, so auto-marking
- * on generation would flag orders as fulfilled that were never emailed.
+ * Two paths, depending on whether transactional email is configured:
+ *
+ *  - Automatic: one button mints the link, emails it and marks the order
+ *    delivered. Sending happens before the status changes, so a failed send
+ *    leaves the order in the queue rather than silently marking it done.
+ *  - Manual: mint a link, copy it, open a pre-filled mail client, mark it sent.
+ *    Generating a link and marking delivered stay separate here, because the
+ *    admin needs the link before they can send anything.
+ *
+ * The manual controls remain available even when email works — a buyer whose
+ * address bounces still needs a link that can be pasted somewhere else.
  */
 export function DeliveryPanel({
   orderId,
@@ -19,18 +26,37 @@ export function DeliveryPanel({
   buyerName,
   productTitle,
   delivered,
+  emailConfigured,
+  emailHint,
 }: {
   orderId: string
   buyerEmail: string
   buyerName: string | null
   productTitle: string
   delivered: boolean
+  emailConfigured: boolean
+  emailHint: string
 }) {
   const [link, setLink] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [showManual, setShowManual] = useState(!emailConfigured)
   const [pending, startTransition] = useTransition()
   const router = useRouter()
+
+  function sendAutomatically() {
+    setError(null)
+    setNotice(null)
+    startTransition(async () => {
+      const result = await sendOrderFile(orderId)
+      if (result.status === 'error') setError(result.message ?? 'Could not send.')
+      else {
+        setNotice(result.message ?? 'Sent.')
+        router.refresh()
+      }
+    })
+  }
 
   function generate() {
     setError(null)
@@ -78,58 +104,94 @@ export function DeliveryPanel({
   return (
     <div className="flex flex-col items-end gap-2">
       <div className="flex flex-wrap items-center justify-end gap-1.5">
-        <button
-          type="button"
-          onClick={generate}
-          disabled={pending}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-white px-2.5 font-heading text-[11px] font-bold uppercase tracking-wide text-brand-heading transition-colors hover:border-brand-cta hover:text-brand-cta disabled:opacity-60"
-        >
-          {pending ? (
-            <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-          ) : (
-            <Link2 className="h-3 w-3" aria-hidden />
-          )}
-          {link ? 'New link' : 'Get link'}
-        </button>
+        {emailConfigured && !delivered && (
+          <button
+            type="button"
+            onClick={sendAutomatically}
+            disabled={pending}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-brand-cta bg-brand-cta px-3 font-heading text-[11px] font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-accent disabled:opacity-60"
+            title={`Email the file to ${buyerEmail} and mark this delivered`}
+          >
+            {pending ? (
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+            ) : (
+              <Send className="h-3 w-3" aria-hidden />
+            )}
+            Send file
+          </button>
+        )}
 
-        {link && (
+        {emailConfigured && delivered && (
+          <span className="inline-flex h-8 items-center gap-1.5 rounded-md border border-green-200 bg-green-50 px-2.5 font-heading text-[11px] font-bold uppercase tracking-wide text-green-800">
+            <Check className="h-3 w-3" aria-hidden />
+            Sent
+          </span>
+        )}
+
+        {!showManual ? (
+          <button
+            type="button"
+            onClick={() => setShowManual(true)}
+            className="font-heading text-[11px] font-bold uppercase tracking-wider text-brand-body/60 hover:text-brand-cta"
+          >
+            Manual
+          </button>
+        ) : (
           <>
             <button
               type="button"
-              onClick={copy}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-white px-2.5 font-heading text-[11px] font-bold uppercase tracking-wide text-brand-heading hover:border-brand-cta hover:text-brand-cta"
+              onClick={generate}
+              disabled={pending}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-white px-2.5 font-heading text-[11px] font-bold uppercase tracking-wide text-brand-heading transition-colors hover:border-brand-cta hover:text-brand-cta disabled:opacity-60"
             >
-              {copied ? (
-                <Check className="h-3 w-3 text-green-600" aria-hidden />
+              {pending ? (
+                <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
               ) : (
-                <Copy className="h-3 w-3" aria-hidden />
+                <Link2 className="h-3 w-3" aria-hidden />
               )}
-              {copied ? 'Copied' : 'Copy'}
+              {link ? 'New link' : 'Get link'}
             </button>
 
-            <a
-              href={mailto}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-brand-cta bg-brand-cta px-2.5 font-heading text-[11px] font-bold uppercase tracking-wide text-white hover:bg-brand-accent"
+            {link && (
+              <>
+                <button
+                  type="button"
+                  onClick={copy}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-white px-2.5 font-heading text-[11px] font-bold uppercase tracking-wide text-brand-heading hover:border-brand-cta hover:text-brand-cta"
+                >
+                  {copied ? (
+                    <Check className="h-3 w-3 text-green-600" aria-hidden />
+                  ) : (
+                    <Copy className="h-3 w-3" aria-hidden />
+                  )}
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+
+                <a
+                  href={mailto}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-white px-2.5 font-heading text-[11px] font-bold uppercase tracking-wide text-brand-heading hover:border-brand-cta hover:text-brand-cta"
+                >
+                  <Mail className="h-3 w-3" aria-hidden />
+                  Mail app
+                </a>
+              </>
+            )}
+
+            <button
+              type="button"
+              onClick={toggleDelivered}
+              disabled={pending}
+              className={
+                delivered
+                  ? 'inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-white px-2.5 font-heading text-[11px] font-bold uppercase tracking-wide text-brand-body/70 hover:text-brand-heading disabled:opacity-60'
+                  : 'inline-flex h-8 items-center gap-1.5 rounded-md border border-green-300 bg-green-600 px-2.5 font-heading text-[11px] font-bold uppercase tracking-wide text-white hover:bg-green-700 disabled:opacity-60'
+              }
             >
-              <Mail className="h-3 w-3" aria-hidden />
-              Email it
-            </a>
+              <Check className="h-3 w-3" aria-hidden />
+              {delivered ? 'Undo' : 'Mark sent'}
+            </button>
           </>
         )}
-
-        <button
-          type="button"
-          onClick={toggleDelivered}
-          disabled={pending}
-          className={
-            delivered
-              ? 'inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-white px-2.5 font-heading text-[11px] font-bold uppercase tracking-wide text-brand-body/70 hover:text-brand-heading disabled:opacity-60'
-              : 'inline-flex h-8 items-center gap-1.5 rounded-md border border-green-300 bg-green-600 px-2.5 font-heading text-[11px] font-bold uppercase tracking-wide text-white hover:bg-green-700 disabled:opacity-60'
-          }
-        >
-          <Check className="h-3 w-3" aria-hidden />
-          {delivered ? 'Undo' : 'Mark sent'}
-        </button>
       </div>
 
       {link && (
@@ -142,7 +204,12 @@ export function DeliveryPanel({
         />
       )}
 
+      {notice && <p className="text-right text-[11px] text-green-700">{notice}</p>}
       {error && <p className="max-w-xs text-right text-[11px] text-red-600">{error}</p>}
+
+      {!emailConfigured && !delivered && (
+        <p className="max-w-xs text-right text-[10px] leading-snug text-brand-body/50">{emailHint}</p>
+      )}
     </div>
   )
 }

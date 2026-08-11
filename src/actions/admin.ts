@@ -5,7 +5,9 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { assertAdmin } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createSignedDownloadUrl } from '@/lib/delivery'
+import { createSignedDownloadUrl, describeExpiry } from '@/lib/delivery'
+import { EMAIL_SETUP_HINT, isEmailConfigured, sendDeliveryEmail } from '@/lib/email'
+import { fileTypeLabel } from '@/lib/format'
 import { one, slugify } from '@/lib/utils'
 
 export interface ActionState {
@@ -556,4 +558,88 @@ export async function setOrderDelivered(
     status: 'success',
     message: delivered ? 'Marked as delivered.' : 'Moved back to pending.',
   }
+}
+
+/**
+ * The one-click path: mint a link, email it, mark the order delivered.
+ *
+ * Order matters. The email is sent BEFORE the order is marked delivered, and a
+ * failed send leaves the row pending — because an order marked delivered that
+ * was never actually emailed is invisible: it drops off the queue, stops being
+ * chased, and the buyer simply never hears from us. The reverse failure (a
+ * delivered email on a still-pending order) is harmless and self-correcting,
+ * since the admin can see the order and mark it manually.
+ */
+export async function sendOrderFile(orderId: string): Promise<ActionState> {
+  const session = await assertAdmin()
+  if (!session) return DENIED
+
+  if (!isEmailConfigured()) {
+    return { status: 'error', message: EMAIL_SETUP_HINT }
+  }
+
+  const db = createAdminClient()
+  const { data, error } = await db
+    .from('manual_orders')
+    .select('id, buyer_email, buyer_name, status, products ( title, file_url, file_type )')
+    .eq('id', orderId)
+    .maybeSingle()
+
+  if (error || !data) return { status: 'error', message: 'Order not found.' }
+
+  const order = data as {
+    buyer_email: string
+    buyer_name: string | null
+    status: string
+    products?: unknown
+  }
+  const product = one<{ title: string; file_url: string | null; file_type: string | null }>(
+    order.products as never
+  )
+
+  if (!product?.file_url) {
+    return {
+      status: 'error',
+      message: 'That product has no file attached yet — upload one on the product page first.',
+    }
+  }
+
+  const signed = await createSignedDownloadUrl(product.file_url)
+  if ('error' in signed) return { status: 'error', message: signed.error }
+
+  const sent = await sendDeliveryEmail({
+    to: order.buyer_email,
+    buyerName: order.buyer_name,
+    productTitle: product.title,
+    downloadUrl: signed.url,
+    expiresIn: describeExpiry(),
+    fileTypeLabel: product.file_type ? fileTypeLabel(product.file_type) : null,
+  })
+
+  if (!sent.ok) {
+    return { status: 'error', message: `Email not sent: ${sent.error}` }
+  }
+
+  const { error: updateError } = await db
+    .from('manual_orders')
+    .update({ status: 'delivered', delivered_at: new Date().toISOString() })
+    .eq('id', orderId)
+
+  if (updateError) {
+    // The buyer has their file; only our bookkeeping failed. Say exactly that,
+    // so nobody sends it a second time trying to fix the status.
+    return {
+      status: 'error',
+      message: `Email sent, but the order could not be marked delivered (${updateError.message}). Mark it manually.`,
+    }
+  }
+
+  revalidateStorefront()
+  revalidatePath('/admin/orders')
+  return { status: 'success', message: `Sent to ${order.buyer_email}.` }
+}
+
+/** Lets the orders page render the right controls without leaking env vars. */
+export async function emailStatus(): Promise<{ configured: boolean; hint: string }> {
+  return { configured: isEmailConfigured(), hint: EMAIL_SETUP_HINT }
 }
