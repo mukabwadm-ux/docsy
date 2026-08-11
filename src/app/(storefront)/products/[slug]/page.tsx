@@ -11,6 +11,7 @@ import { StarRating } from '@/components/star-rating'
 import { StickyCta } from '@/components/sticky-cta'
 import { StoryBlocks } from '@/components/story-blocks'
 import { ViewCounter } from '@/components/view-counter'
+import { WishlistButton } from '@/components/wishlist-button'
 import { Button } from '@/components/ui/button'
 import { fileTypeLabel } from '@/lib/format'
 import {
@@ -19,6 +20,8 @@ import {
   getRelatedProducts,
   getReviews,
 } from '@/lib/queries'
+import { getBuyerSession } from '@/lib/buyer'
+import { getWishlistIds } from '@/lib/account-data'
 
 export const revalidate = 60
 export const dynamicParams = true
@@ -70,10 +73,15 @@ export default async function ProductPage({ params }: { params: { slug: string }
   const product = await getProductBySlug(params.slug)
   if (!product) notFound()
 
-  const [reviews, related] = await Promise.all([
+  const [reviews, related, buyer] = await Promise.all([
     getReviews(product.id),
     getRelatedProducts(product),
+    // Reading the session makes this route dynamic, which is why the page keeps
+    // its own `revalidate` for the anonymous case and the saved state is the only
+    // per-visitor bit rendered here.
+    getBuyerSession(),
   ])
+  const savedIds = buyer ? await getWishlistIds(buyer.userId) : new Set<string>()
 
   const category = product.categories
 
@@ -168,6 +176,15 @@ export default async function ProductPage({ params }: { params: { slug: string }
               <BuyPanel product={product} id="buy" />
             </div>
 
+            <div className="mt-4">
+              <WishlistButton
+                productId={product.id}
+                saved={savedIds.has(product.id)}
+                variant="full"
+                returnTo={`/products/${product.slug}`}
+              />
+            </div>
+
             <ul className="mt-8 grid grid-cols-3 gap-4 border-t border-brand-heading/10 pt-6">
               {TRUST_BADGES.map(({ icon: Icon, label }) => (
                 <li key={label} className="flex flex-col items-center gap-2 text-center">
@@ -246,7 +263,7 @@ export default async function ProductPage({ params }: { params: { slug: string }
             <h2 className="text-2xl sm:text-3xl">You might also like</h2>
             <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-6">
               {related.map((p) => (
-                <ProductCard key={p.id} product={p} />
+                <ProductCard key={p.id} product={p} savedInWishlist={savedIds.has(p.id)} />
               ))}
             </div>
           </div>

@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { sendOrderConfirmation } from '@/lib/order-email'
 
 /**
  * Opens a checkout and sends the buyer to it.
@@ -79,6 +80,18 @@ export async function requestPurchase(
   if (!token) {
     return { status: 'error', message: 'This product is no longer available.' }
   }
+
+  /**
+   * Create the account and send the receipt before redirecting.
+   *
+   * Awaited, not fired loose: an unawaited promise in a server action can be cut
+   * short when the response is sent, which would leave an order with no
+   * confirmation and no account. A failure here is deliberately not surfaced to
+   * the buyer — their order exists and is visible in the admin queue, so the
+   * recoverable outcome is to show them the checkout page rather than an error
+   * that makes them think the purchase failed.
+   */
+  await sendOrderConfirmation(token).catch(() => undefined)
 
   // redirect() throws, so it must sit outside the try/catch above and be the
   // last thing this action does.

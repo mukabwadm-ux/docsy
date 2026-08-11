@@ -17,6 +17,56 @@ export function isEmailConfigured() {
 export const EMAIL_SETUP_HINT =
   'Add RESEND_API_KEY and EMAIL_FROM to send delivery emails automatically.'
 
+export interface OutgoingEmail {
+  to: string
+  subject: string
+  html: string
+  text: string
+}
+
+/**
+ * Sends one message. Every template funnels through here, so retries, timeouts
+ * and error shaping exist once.
+ */
+export async function sendEmail(
+  message: OutgoingEmail
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const apiKey = process.env.RESEND_API_KEY
+  const from = process.env.EMAIL_FROM
+  if (!apiKey || !from) return { ok: false, error: EMAIL_SETUP_HINT }
+
+  try {
+    const res = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from,
+        to: [message.to],
+        reply_to: from,
+        subject: message.subject,
+        html: message.html,
+        text: message.text,
+      }),
+      signal: AbortSignal.timeout(15000),
+    })
+
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`
+      try {
+        const body = (await res.json()) as { message?: string }
+        if (body?.message) detail = body.message
+      } catch {
+        /* keep the status code */
+      }
+      return { ok: false, error: detail }
+    }
+    return { ok: true }
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : 'unknown error'
+    return { ok: false, error: `Could not reach the email service (${reason}).` }
+  }
+}
+
 interface DeliveryEmail {
   to: string
   buyerName: string | null

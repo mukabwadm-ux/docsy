@@ -37,6 +37,16 @@ export async function middleware(request: NextRequest) {
   return response
 }
 
+/**
+ * Anywhere a session is read. /account is the buyer dashboard, /admin the panel,
+ * and /checkout reads the session to show a buyer their own order — all three
+ * would otherwise let a token quietly expire mid-visit, bouncing someone to a
+ * login screen while they were actively using the site.
+ *
+ * The catalog is deliberately excluded: it has no session, and a token refresh on
+ * every product page view would cost every anonymous visitor a round trip for
+ * nothing.
+ */
 export const config = {
-  matcher: ['/admin/:path*'],
+  matcher: ['/admin/:path*', '/account/:path*', '/checkout/:path*'],
 }

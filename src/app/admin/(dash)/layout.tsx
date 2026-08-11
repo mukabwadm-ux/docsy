@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import {
   ChartNoAxesColumn,
+  Contact,
   FileText,
   FolderTree,
   LayoutDashboard,
@@ -19,6 +20,7 @@ const NAV = [
   { href: '/admin/orders', label: 'Orders', icon: ShoppingBag, badge: 'orders' },
   { href: '/admin/reviews', label: 'Reviews', icon: Star, badge: 'reviews' },
   { href: '/admin/insights', label: 'Insights', icon: ChartNoAxesColumn },
+  { href: '/admin/audience', label: 'Audience', icon: Contact },
   { href: '/admin/categories', label: 'Categories', icon: FolderTree },
 ] as const
 

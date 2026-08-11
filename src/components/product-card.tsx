@@ -2,11 +2,20 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { FileText } from 'lucide-react'
 import { StarRating } from '@/components/star-rating'
+import { WishlistButton } from '@/components/wishlist-button'
 import { Badge } from '@/components/ui/badge'
 import { discountPercent, fileTypeLabel, formatPriceOrFree } from '@/lib/format'
 import type { Product } from '@/lib/types'
 
-export function ProductCard({ product, priority = false }: { product: Product; priority?: boolean }) {
+export function ProductCard({
+  product,
+  priority = false,
+  savedInWishlist = false,
+}: {
+  product: Product
+  priority?: boolean
+  savedInWishlist?: boolean
+}) {
   const cover = product.preview_image_url ?? product.product_images?.[0]?.image_url ?? null
   const off = discountPercent(product.price, product.compare_at_price)
 
@@ -16,6 +25,7 @@ export function ProductCard({ product, priority = false }: { product: Product; p
       className="group flex flex-col overflow-hidden rounded-lg border border-border bg-white shadow-card transition-all hover:-translate-y-0.5 hover:shadow-card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-cta"
     >
       <div className="relative aspect-cover overflow-hidden bg-brand-cream">
+        <WishlistButton productId={product.id} saved={savedInWishlist} />
         {cover ? (
           <Image
             src={cover}
