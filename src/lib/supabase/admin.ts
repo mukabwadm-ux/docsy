@@ -12,10 +12,22 @@ import { createClient } from '@supabase/supabase-js'
  * in src/lib/auth.ts.
  */
 export function createAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SECRET_KEY
-  if (!key) throw new Error('SUPABASE_SECRET_KEY is not configured')
 
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key, {
+  // Named explicitly for the same reason as in ./public.ts: the client's own
+  // error is a bare "supabaseUrl is required." from inside a bundled chunk.
+  if (!url || !key) {
+    const missing = [!url && 'NEXT_PUBLIC_SUPABASE_URL', !key && 'SUPABASE_SECRET_KEY']
+      .filter(Boolean)
+      .join(' and ')
+    throw new Error(
+      `Supabase admin client is not configured: ${missing} is not set. ` +
+        'On Vercel, add it under Settings → Environment Variables and redeploy.'
+    )
+  }
+
+  return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: {
       /**
