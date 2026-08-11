@@ -12,19 +12,22 @@ import { createAdminClient } from '@/lib/supabase/admin'
  * form, the validation and the success copy all stay.
  */
 
+/**
+ * Email is the only required field.
+ *
+ * A digital download needs exactly one thing to be deliverable: somewhere to send
+ * it. Name and note are collected only if the buyer volunteers them — every extra
+ * required box on a $19 impulse purchase is another chance to abandon.
+ */
 const schema = z.object({
   productId: z.string().uuid('Something went wrong — please reload the page.'),
-  name: z
-    .string()
-    .trim()
-    .min(2, 'Please enter your name.')
-    .max(80, 'That name is too long.'),
   email: z
     .string()
     .trim()
     .toLowerCase()
     .email('Enter a valid email — this is where your file goes.')
     .max(160),
+  name: z.string().trim().max(80, 'That name is too long.').optional(),
   note: z.string().trim().max(500, 'Please keep the note under 500 characters.').optional(),
 })
 
@@ -40,8 +43,8 @@ export async function requestPurchase(
 ): Promise<PurchaseState> {
   const parsed = schema.safeParse({
     productId: formData.get('productId'),
-    name: formData.get('name'),
     email: formData.get('email'),
+    name: formData.get('name') || undefined,
     note: formData.get('note') || undefined,
   })
 
@@ -63,7 +66,7 @@ export async function requestPurchase(
     }
   }
 
-  const { productId, name, email, note } = parsed.data
+  const { productId, email, name, note } = parsed.data
   const db = createAdminClient()
 
   /**
@@ -89,7 +92,7 @@ export async function requestPurchase(
   const { error } = await db.from('manual_orders').insert({
     product_id: product.id,
     buyer_email: email,
-    buyer_name: name,
+    buyer_name: name ?? null,
     note: note ?? null,
     amount: product.price,
     currency: product.currency,
@@ -103,8 +106,13 @@ export async function requestPurchase(
     }
   }
 
+  // Greet by first name only when one was given; "Thanks undefined" is worse
+  // than no greeting at all.
+  const firstName = name?.split(' ')[0]
   return {
     status: 'success',
-    message: `Thanks ${name.split(' ')[0]} — your order is in. We'll email ${email} with your download link shortly.`,
+    message: firstName
+      ? `Thanks ${firstName} — your order is in. Your download link is on its way to ${email}.`
+      : `Your order is in. Your download link is on its way to ${email}.`,
   }
 }
