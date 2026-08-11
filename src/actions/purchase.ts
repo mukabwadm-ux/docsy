@@ -1,24 +1,22 @@
 'use server'
 
+import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 /**
- * Phase 1 purchase intent.
+ * Opens a checkout and sends the buyer to it.
  *
- * No gateway is wired up yet, so "Buy now" records the buyer's email against
- * the product and the file is delivered by hand from the admin queue. When
- * Stripe lands, this action is what gets swapped for a session redirect — the
- * form, the validation and the success copy all stay.
+ * Email is the only required field. A digital download needs exactly one thing to
+ * be deliverable — an address to send it to — and every extra required box on a
+ * $19 impulse purchase is another chance to abandon.
+ *
+ * The order row is created here, before payment, on purpose. It means an
+ * interrupted checkout is a row we already have: recoverable by URL, and
+ * followable up by email. Nothing about a card is stored, now or later — a
+ * gateway tokenises that in the browser and we keep only its reference.
  */
 
-/**
- * Email is the only required field.
- *
- * A digital download needs exactly one thing to be deliverable: somewhere to send
- * it. Name and note are collected only if the buyer volunteers them — every extra
- * required box on a $19 impulse purchase is another chance to abandon.
- */
 const schema = z.object({
   productId: z.string().uuid('Something went wrong — please reload the page.'),
   email: z
@@ -32,7 +30,7 @@ const schema = z.object({
 })
 
 export interface PurchaseState {
-  status: 'idle' | 'success' | 'error'
+  status: 'idle' | 'error'
   message?: string
   fieldErrors?: Partial<Record<'name' | 'email' | 'note', string>>
 }
@@ -56,63 +54,33 @@ export async function requestPurchase(
         fieldErrors[key] ??= issue.message
       }
     }
-    // A bad productId is not a field the buyer can fix, so it surfaces as a
-    // general message rather than silently doing nothing.
     const productIssue = parsed.error.issues.find((i) => i.path[0] === 'productId')
-    return {
-      status: 'error',
-      fieldErrors,
-      message: productIssue?.message,
-    }
+    return { status: 'error', fieldErrors, message: productIssue?.message }
   }
 
   const { productId, email, name, note } = parsed.data
-  const db = createAdminClient()
 
   /**
-   * Re-read the price server-side. The rendered page carries a price, but a
-   * value posted from the browser is a suggestion, not a fact — and this
-   * snapshot is what the fulfilment queue shows and what revenue gets counted
-   * from. Reading `status` too means a draft or archived product cannot be
-   * bought through a stale tab.
+   * One round trip. open_checkout reads the price itself, refuses products that
+   * are not active, and returns the existing token when this buyer already has
+   * an open checkout for this product — so a double tap or a reload cannot
+   * produce two pending orders for one purchase.
    */
-  const { data: product, error: lookupError } = await db
-    .from('products')
-    .select('id, title, price, currency, status')
-    .eq('id', productId)
-    .maybeSingle()
-
-  if (lookupError) {
-    return { status: 'error', message: 'We could not reach the store. Please try again.' }
-  }
-  if (!product || product.status !== 'active') {
-    return { status: 'error', message: 'This product is no longer available.' }
-  }
-
-  const { error } = await db.from('manual_orders').insert({
-    product_id: product.id,
-    buyer_email: email,
-    buyer_name: name ?? null,
-    note: note ?? null,
-    amount: product.price,
-    currency: product.currency,
-    status: 'pending',
+  const { data: token, error } = await createAdminClient().rpc('open_checkout', {
+    p_product_id: productId,
+    p_email: email,
+    p_name: name ?? null,
+    p_note: note ?? null,
   })
 
   if (error) {
-    return {
-      status: 'error',
-      message: 'We could not record your order. Please try again in a moment.',
-    }
+    return { status: 'error', message: 'We could not start your order. Please try again.' }
+  }
+  if (!token) {
+    return { status: 'error', message: 'This product is no longer available.' }
   }
 
-  // Greet by first name only when one was given; "Thanks undefined" is worse
-  // than no greeting at all.
-  const firstName = name?.split(' ')[0]
-  return {
-    status: 'success',
-    message: firstName
-      ? `Thanks ${firstName} — your order is in. Your download link is on its way to ${email}.`
-      : `Your order is in. Your download link is on its way to ${email}.`,
-  }
+  // redirect() throws, so it must sit outside the try/catch above and be the
+  // last thing this action does.
+  redirect(`/checkout/${token}`)
 }

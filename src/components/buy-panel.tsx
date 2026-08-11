@@ -2,16 +2,7 @@
 
 import { useState } from 'react'
 import { useFormState, useFormStatus } from 'react-dom'
-import {
-  AlertCircle,
-  CheckCircle2,
-  ChevronDown,
-  Download,
-  Loader2,
-  Lock,
-  Mail,
-  Zap,
-} from 'lucide-react'
+import { AlertCircle, ChevronDown, Download, Loader2, Lock, Zap } from 'lucide-react'
 import { requestPurchase, type PurchaseState } from '@/actions/purchase'
 import { Button } from '@/components/ui/button'
 import { Input, Label, Textarea } from '@/components/ui/input'
@@ -46,31 +37,6 @@ export function BuyPanel({
 
   const off = discountPercent(product.price, product.compare_at_price)
   const price = formatPriceOrFree(product.price, product.currency)
-
-  if (state.status === 'success') {
-    return (
-      <div
-        id={id}
-        className="scroll-mt-24 rounded-lg border-2 border-brand-cta/30 bg-brand-cream p-6"
-        role="status"
-        aria-live="polite"
-      >
-        <div className="flex items-start gap-3">
-          <CheckCircle2 className="mt-0.5 h-6 w-6 shrink-0 text-brand-cta" aria-hidden />
-          <div>
-            <p className="font-heading text-lg font-bold uppercase tracking-wide text-brand-heading">
-              Order received
-            </p>
-            <p className="mt-1.5 text-[15px] leading-relaxed text-brand-body">{state.message}</p>
-            <p className="mt-3 flex items-start gap-2 text-sm text-brand-body/80">
-              <Mail className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-              Check your spam folder if it has not arrived within a few hours.
-            </p>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div id={id} className="scroll-mt-24">
@@ -190,8 +156,8 @@ export function BuyPanel({
 
         <p className="mt-3 flex items-center gap-1.5 text-xs text-brand-body/70">
           <Lock className="h-3 w-3" aria-hidden />
-          Nothing is charged on this page — we confirm payment and send your file by hand while
-          automated checkout is being finished.
+          Takes you to a one-page order summary. Nothing is charged yet, and we never store card
+          details.
         </p>
       </form>
     </div>
@@ -209,7 +175,7 @@ function SubmitButton({ label }: { label: string }) {
       disabled={pending}
     >
       {pending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
-      {pending ? 'Placing order…' : `${label} →`}
+      {pending ? 'One moment…' : `${label} →`}
     </Button>
   )
 }
