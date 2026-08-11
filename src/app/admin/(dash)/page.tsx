@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { ArrowRight, Plus } from 'lucide-react'
+import { LocalTime } from '@/components/admin/local-time'
 import { Card, PageHeader, StatCard, StatusPill, Table, Td, Th } from '@/components/admin/ui'
 import { Button } from '@/components/ui/button'
 import { requireAdmin } from '@/lib/auth'
@@ -183,8 +184,11 @@ export default async function AdminDashboard() {
                   <Td>
                     <StatusPill status={o.status} />
                   </Td>
-                  <Td className="whitespace-nowrap text-xs text-brand-body/70">
-                    {formatRelative(o.created_at)}
+                  <Td className="whitespace-nowrap">
+                    <span className="block text-xs font-medium text-brand-heading">
+                      {formatRelative(o.created_at)}
+                    </span>
+                    <LocalTime iso={o.created_at} className="block text-[11px] text-brand-body/60" />
                   </Td>
                 </tr>
               ))}

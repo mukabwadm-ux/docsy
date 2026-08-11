@@ -43,9 +43,27 @@ export function formatDate(iso: string) {
   })
 }
 
+/**
+ * Elapsed time, down to the minute.
+ *
+ * Safe to render on the server, unlike a clock time: an elapsed duration is the
+ * difference between two instants, so it reads the same in every timezone.
+ *
+ * The minute and hour buckets matter for the fulfilment queue — "Today" is true
+ * for an order placed one minute ago and one placed eleven hours ago, and those
+ * are very different situations for the person waiting on a file.
+ */
 export function formatRelative(iso: string) {
-  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
-  if (days < 1) return 'Today'
+  const ms = Date.now() - new Date(iso).getTime()
+  const minutes = Math.floor(ms / 60000)
+
+  if (minutes < 1) return 'Just now'
+  if (minutes < 60) return `${minutes} min ago`
+
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`
+
+  const days = Math.floor(hours / 24)
   if (days === 1) return 'Yesterday'
   if (days < 30) return `${days} days ago`
   if (days < 365) return `${Math.floor(days / 30)} months ago`

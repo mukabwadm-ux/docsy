@@ -1,8 +1,9 @@
 import Link from 'next/link'
 import { DeliveryPanel } from '@/components/admin/delivery-panel'
+import { LocalTime } from '@/components/admin/local-time'
 import { EmptyState, PageHeader, StatusPill, Table, Td, Th } from '@/components/admin/ui'
 import { requireAdmin } from '@/lib/auth'
-import { formatDate, formatPrice, formatRelative } from '@/lib/format'
+import { formatPrice, formatRelative } from '@/lib/format'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
@@ -136,14 +137,18 @@ export default async function AdminOrdersPage({
                 <Td>
                   <StatusPill status={o.status} />
                   {o.delivered_at && (
-                    <span className="mt-1 block text-[11px] text-brand-body/60">
-                      {formatDate(o.delivered_at)}
-                    </span>
+                    <LocalTime
+                      iso={o.delivered_at}
+                      className="mt-1 block text-[11px] text-brand-body/60"
+                    />
                   )}
                 </Td>
 
-                <Td className="whitespace-nowrap text-xs text-brand-body/70">
-                  {formatRelative(o.created_at)}
+                <Td className="whitespace-nowrap">
+                  <span className="block text-xs font-medium text-brand-heading">
+                    {formatRelative(o.created_at)}
+                  </span>
+                  <LocalTime iso={o.created_at} className="block text-[11px] text-brand-body/60" />
                 </Td>
 
                 <Td>
