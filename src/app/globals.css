@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Docsy palette, from the conversion reference.
+       One accent hue carries all action — the red CTA. The tan and cream are
+       structural: they band the page into sections so a long sales page still
+       reads as chapters rather than one endless scroll. Nothing else is
+       coloured, which is what lets the CTA stay the only thing shouting. */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 8%; /* #151515 */
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 8%;
+
+    /* #EB2437 — every buy action, and nothing else. */
+    --primary: 354 83% 53%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 45 100% 93%; /* #FFF6DB cream */
+    --secondary-foreground: 0 0% 8%;
+
+    --muted: 40 20% 96%;
+    --muted-foreground: 0 0% 40%;
+
+    --accent: 41 77% 85%; /* #F6E3BB tan */
+    --accent-foreground: 0 0% 8%;
+
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 36 22% 88%;
+    --input: 36 18% 84%;
+    --ring: 354 83% 53%;
+
+    --radius: 0.5rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background antialiased;
+    /* #373737 — body copy is deliberately lighter than the #151515 headings.
+       The reference leans on that two-step contrast rather than on weight. */
+    color: #373737;
+    font-family: var(--font-lora), Georgia, serif;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-oswald), 'Arial Narrow', sans-serif;
+    color: #151515;
+    @apply font-bold uppercase tracking-tight;
+  }
+
+  /* Oswald is condensed — cramped at paragraph sizes, but it earns its keep on
+     labels, prices, buttons and eyebrows, where the narrow width buys room.
+     Anything wearing .font-heading opts in. */
+  .font-heading {
+    font-family: var(--font-oswald), 'Arial Narrow', sans-serif;
+  }
+
+  ::selection {
+    background: rgb(235 36 55 / 0.16);
+  }
+}
+
+@layer components {
+  /* Reserve the image box before the pixels land. With next/image fill, this
+     is what holds CLS at zero across the catalog grid. */
+  .aspect-cover {
+    aspect-ratio: 4 / 5;
+  }
+
+  .shimmer {
+    background: linear-gradient(100deg, #f1ece1 20%, #faf6ee 40%, #f1ece1 60%);
+    background-size: 220% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    to {
+      background-position: -220% 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .shimmer,
+    .animate-marquee {
+      animation: none;
+    }
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* The sales-page body column. The reference holds long copy near 62ch —
+     wider than that and the eye loses the line on the return sweep. */
+  .prose-sales p {
+    @apply text-[17px] leading-[1.75];
+    max-width: 62ch;
+  }
+  .prose-sales p + p {
+    @apply mt-5;
+  }
+}
