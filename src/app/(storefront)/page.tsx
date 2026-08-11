@@ -43,7 +43,7 @@ export default async function HomePage() {
     <>
       {/* ---------------------------------------------------------- hero */}
       <section className="border-b border-brand-tan bg-brand-cream">
-        <div className="container grid items-center gap-10 py-14 lg:grid-cols-[1.1fr_1fr] lg:py-20">
+        <div className="container grid items-center gap-10 py-14 lg:grid-cols-[1.1fr_1fr] lg:gap-20 lg:py-20">
           <div>
             <p className="font-heading text-xs font-bold uppercase tracking-[0.2em] text-brand-cta">
               Digital downloads · Instant access
@@ -102,8 +102,15 @@ export default async function HomePage() {
           </div>
 
           {/* Editorial stack rather than a stock photo — there is no single
-              product image that represents a whole catalog. */}
-          <div className="relative hidden lg:block">
+              product image that represents a whole catalog.
+
+              The three cards are positioned against this wrapper, so the wrapper
+              is given the cluster's own width (the mid card reaches 20rem, and
+              rotation carries it to ~20.8rem) instead of being left to stretch
+              across the whole grid track. Without an intrinsic width there is
+              nothing for justify-self-end to align, and the stack stays pinned
+              to the left edge of the track — right up against the copy. */}
+          <div className="relative hidden lg:block lg:w-[21rem] lg:justify-self-end">
             <div className="absolute -left-4 top-8 h-64 w-52 rotate-[-8deg] rounded-lg border border-brand-tan bg-white shadow-card" />
             <div className="absolute left-24 top-2 h-72 w-56 rotate-[5deg] rounded-lg border border-brand-tan bg-brand-tan/40 shadow-card" />
             <div className="relative ml-10 flex h-80 w-64 flex-col justify-between rounded-lg border border-brand-heading/10 bg-white p-6 shadow-card-hover">
