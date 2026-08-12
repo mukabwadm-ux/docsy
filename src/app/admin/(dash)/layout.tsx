@@ -3,6 +3,7 @@ import {
   ChartNoAxesColumn,
   Contact,
   Mail,
+  Megaphone,
   FileText,
   FolderTree,
   LayoutDashboard,
@@ -23,6 +24,7 @@ const NAV = [
   { href: '/admin/insights', label: 'Insights', icon: ChartNoAxesColumn },
   { href: '/admin/audience', label: 'Audience', icon: Contact },
   { href: '/admin/emails', label: 'Emails', icon: Mail },
+  { href: '/admin/campaigns', label: 'Campaigns', icon: Megaphone },
   { href: '/admin/categories', label: 'Categories', icon: FolderTree },
 ] as const
 
