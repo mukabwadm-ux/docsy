@@ -1,10 +1,15 @@
 /**
- * Creates (or promotes) an admin user.
+ * Creates an admin user, promotes an existing one, or changes their password.
  *
  *   node scripts/grant-admin.mjs you@example.com 'a-strong-password'
  *
- * If the auth user already exists, the password argument is ignored and the
- * account is simply added to admin_users.
+ * Passing a password always sets it, whether the account is new or not — there is
+ * otherwise no way to change an admin password from the command line, and the
+ * obvious guess (running this again) used to silently do nothing.
+ *
+ * Quote the password in your shell. Characters like #, ! and $ are shell syntax
+ * unquoted: # starts a comment, so an unquoted 'Cashy@2020#' arrives as
+ * 'Cashy@2020'.
  */
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -60,6 +65,15 @@ if (!user) {
   console.log(`Created auth user ${email}`)
 } else {
   console.log(`Found existing auth user ${email}`)
+
+  if (password) {
+    const { error } = await db.auth.admin.updateUserById(user.id, { password })
+    if (error) {
+      console.error(`Could not update the password: ${error.message}`)
+      process.exit(1)
+    }
+    console.log('Password updated')
+  }
 }
 
 const { error } = await db
