@@ -17,6 +17,10 @@ interface OrderRow {
   amount: number | null
   currency: string
   status: 'pending' | 'delivered'
+  payment_status: 'unpaid' | 'pending' | 'paid' | 'failed' | 'refunded'
+  payment_provider: string | null
+  payment_reference: string | null
+  base_amount: number | null
   delivered_at: string | null
   created_at: string
   products: { id: string; title: string; file_url: string | null } | null
@@ -34,7 +38,7 @@ export default async function AdminOrdersPage({
   let query = createAdminClient()
     .from('manual_orders')
     .select(
-      'id, buyer_email, buyer_name, note, amount, currency, status, delivered_at, created_at, products ( id, title, file_url )'
+      'id, buyer_email, buyer_name, note, amount, currency, base_amount, status, payment_status, payment_provider, payment_reference, delivered_at, created_at, products ( id, title, file_url )'
     )
     // Oldest first within the pending queue: the person who has been waiting
     // longest should be served first, which is the opposite of the newest-first
@@ -150,10 +154,36 @@ export default async function AdminOrdersPage({
                   )}
                 </Td>
 
-                <Td className="whitespace-nowrap">{formatPrice(o.amount, o.currency)}</Td>
+                <Td className="whitespace-nowrap">
+                  {formatPrice(o.amount, o.currency)}
+                  {/* The USD equivalent, when the buyer paid in shillings. Every
+                      revenue total is in USD, so this is what reconciles. */}
+                  {o.currency !== 'USD' && o.base_amount !== null && (
+                    <span className="mt-0.5 block text-[11px] text-brand-body/60">
+                      = {formatPrice(o.base_amount, 'USD')}
+                    </span>
+                  )}
+                </Td>
 
                 <Td>
                   <StatusPill status={o.status} />
+                  {o.payment_status === 'paid' ? (
+                    <span className="mt-1 block font-heading text-[10px] font-bold uppercase tracking-wider text-green-700">
+                      Paid{o.payment_provider === 'paystack' ? ' · Paystack' : ''}
+                    </span>
+                  ) : o.payment_status === 'pending' ? (
+                    <span className="mt-1 block font-heading text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                      Payment started
+                    </span>
+                  ) : o.payment_status === 'failed' ? (
+                    <span className="mt-1 block font-heading text-[10px] font-bold uppercase tracking-wider text-red-600">
+                      Payment failed
+                    </span>
+                  ) : (
+                    <span className="mt-1 block font-heading text-[10px] font-bold uppercase tracking-wider text-brand-body/50">
+                      Unpaid
+                    </span>
+                  )}
                   {o.delivered_at && (
                     <LocalTime
                       iso={o.delivered_at}

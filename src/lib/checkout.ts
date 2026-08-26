@@ -14,6 +14,10 @@ export interface CheckoutView {
     created_at: string
     delivered_at: string | null
     checkout_expires_at: string | null
+    /** Has the money arrived? Independent of whether the file has gone out. */
+    paymentStatus: 'unpaid' | 'pending' | 'paid' | 'failed' | 'refunded'
+    paymentReference: string | null
+    paidAt: string | null
   }
   product: {
     slug: string
@@ -46,7 +50,7 @@ export async function getCheckout(token: string): Promise<CheckoutView | null> {
     .from('manual_orders')
     .select(
       `id, buyer_email, buyer_name, amount, currency, status, created_at, delivered_at,
-       checkout_expires_at,
+       checkout_expires_at, payment_status, payment_reference, paid_at,
        products ( slug, title, file_type, file_size_mb, preview_image_url )`
     )
     .eq('checkout_token', token)
@@ -58,8 +62,18 @@ export async function getCheckout(token: string): Promise<CheckoutView | null> {
   const product = one<CheckoutView['product']>(row.products as never) ?? null
 
   const expiresAt = row.checkout_expires_at as string | null
+  const paymentStatus = (row.payment_status as string | null) ?? 'unpaid'
+
+  /**
+   * A paid order is never treated as expired. The link's 30-day window governs
+   * how long someone has to *start* paying; once money has changed hands the page
+   * has to keep working so they can see their receipt.
+   */
   const expired =
-    row.status === 'pending' && expiresAt !== null && new Date(expiresAt).getTime() < Date.now()
+    row.status === 'pending' &&
+    paymentStatus !== 'paid' &&
+    expiresAt !== null &&
+    new Date(expiresAt).getTime() < Date.now()
 
   return {
     order: {
@@ -72,6 +86,9 @@ export async function getCheckout(token: string): Promise<CheckoutView | null> {
       created_at: row.created_at as string,
       delivered_at: (row.delivered_at as string | null) ?? null,
       checkout_expires_at: expiresAt,
+      paymentStatus: paymentStatus as CheckoutView['order']['paymentStatus'],
+      paymentReference: (row.payment_reference as string | null) ?? null,
+      paidAt: (row.paid_at as string | null) ?? null,
     },
     product: product && product.slug ? product : null,
     expired,

@@ -11,7 +11,10 @@
     "db:seed": "node scripts/seed.mjs",
     "db:reset": "node scripts/migrate.mjs --force && node scripts/seed.mjs",
     "admin:grant": "node scripts/grant-admin.mjs",
-    "mail:test": "node scripts/mail-test.mjs"
+    "mail:test": "node scripts/mail-test.mjs",
+    "currency:test": "node scripts/currency-test.mjs",
+    "payment:test": "node scripts/payment-test.mjs",
+    "campaign:test": "node scripts/campaign-test.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.23",
