@@ -209,14 +209,25 @@ export function describeSmtpError(
 
   // Connect never completed: nothing to do with credentials.
   if (code === 'ETIMEDOUT' || code === 'ESOCKET' || /timeout/i.test(raw)) {
+    /**
+     * 465 timing out is common enough to name. Plenty of mail servers only
+     * listen on 587, and some networks block 465 outbound, so the first thing
+     * worth trying is the other port rather than new credentials.
+     */
+    const portHint =
+      smtp.port === 465
+        ? ' Many servers only listen on 587, and some networks block 465 outbound — try port 587 before anything else.'
+        : smtp.port === 25
+          ? ' Port 25 is blocked by almost every host and cloud provider. Use 587.'
+          : ''
+
     const secureHint =
       smtp.secure && smtp.port !== 465
         ? ` Port ${smtp.port} is being used with implicit TLS, which hangs — set SMTP_SECURE=false or use port 465.`
-        : !smtp.secure && smtp.port === 465
-          ? ' Port 465 needs implicit TLS — set SMTP_SECURE=true.'
-          : ''
+        : ''
     return (
       `SMTP: could not connect to ${target} (${code || 'timeout'}).` +
+      portHint +
       secureHint +
       ' The host and port are reachable from nowhere, or a firewall is blocking it —' +
       ' shared hosts often refuse SMTP from cloud providers, and port 25 is blocked' +
