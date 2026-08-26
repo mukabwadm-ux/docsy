@@ -243,7 +243,29 @@ export function describeSmtpError(
     return `SMTP: ${target} refused the connection — the port is closed. Try 587, or 465 with SMTP_SECURE=true.`
   }
   if (code === 'EAUTH' || /auth|credential|password|535|534/i.test(raw)) {
-    return `SMTP: ${target} rejected the credentials. The username is usually the full email address. (${raw})`
+    return (
+      `SMTP: ${target} accepted the connection but rejected the login. The username is` +
+      ` normally the full email address, and the mailbox has to exist on that server —` +
+      ` a domain pointed elsewhere often means the mailbox was never created. (${raw})`
+    )
+  }
+  /**
+   * A hostname that does not match the server's certificate.
+   *
+   * Common on shared hosting, where a friendly alias like
+   * mail.provider.com points at a numbered server whose certificate only names
+   * itself. The error text carries the name the certificate *does* cover, so
+   * pull it out and suggest it — the fix is to connect to that name, not to
+   * disable verification, which would trade a clear error for a silent
+   * man-in-the-middle risk on every message.
+   */
+  const altName = /is not in the cert's altnames:[^:]*DNS:([^\s,]+)/i.exec(raw)?.[1]
+  if (altName) {
+    return (
+      `SMTP: ${smtp.host} does not match the server's TLS certificate, which is issued for` +
+      ` ${altName}. Set the host to ${altName} and try again — do not disable certificate` +
+      ` checking, that would leave every message open to interception.`
+    )
   }
   if (/self.signed|certificate|CERT_/i.test(raw)) {
     return `SMTP: ${target} presented a certificate that could not be verified (${raw}).`
