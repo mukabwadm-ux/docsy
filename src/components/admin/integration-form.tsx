@@ -44,12 +44,10 @@ export function IntegrationForm({
   group,
   resolved,
   encryptionReady,
-  encryptionHint,
 }: {
   group: ConfigGroup
   resolved: Record<string, ResolvedField>
   encryptionReady: boolean
-  encryptionHint: string
 }) {
   const [state, formAction] = useFormState(saveConfigGroup, initial)
   const [test, setTest] = useState<ConfigState | null>(null)
@@ -97,8 +95,21 @@ export function IntegrationForm({
           <p className="mt-4 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             <span>
-              <strong>Secrets cannot be saved yet.</strong> {encryptionHint} Storing a payment key
-              unencrypted is not offered — it would be worse than keeping it in the environment.
+              <strong>Secrets cannot be saved here yet.</strong> They are encrypted before storage,
+              which needs <code className="rounded bg-white px-1">CONFIG_ENCRYPTION_KEY</code> in
+              your hosting environment. Storing a payment key unencrypted is not offered — it would
+              be worse than keeping it in the environment.
+              <br />
+              <br />
+              Two ways forward, both one variable in Vercel → Settings → Environment Variables:
+              <br />
+              1. Add <code className="rounded bg-white px-1">CONFIG_ENCRYPTION_KEY</code> (generate
+              with <code className="rounded bg-white px-1">openssl rand -base64 32</code>), redeploy,
+              and these fields unlock.
+              <br />
+              2. Or set the key itself there — for Paystack that is{' '}
+              <code className="rounded bg-white px-1">PAYSTACK_SECRET_KEY</code> — and skip this form
+              entirely.
             </span>
           </p>
         )}
@@ -173,7 +184,19 @@ function FieldRow({
 
   const fromEnv = resolved.source === 'env'
   const stored = resolved.source === 'database'
-  const locked = fromEnv || (field.secret === true && !encryptionReady)
+
+  /**
+   * A field can be disabled for two unrelated reasons, and they need different
+   * explanations. Collapsing them into one message told anyone without an
+   * encryption key that their Paystack key was "managed in the environment",
+   * which was simply untrue and sent them looking in the wrong place.
+   */
+  const needsEncryptionKey = field.secret === true && !encryptionReady && !fromEnv
+  const locked = fromEnv || needsEncryptionKey
+
+  const lockedPlaceholder = fromEnv
+    ? `Set by ${field.env} in the environment`
+    : 'Set CONFIG_ENCRYPTION_KEY first — see the warning above'
 
   return (
     <div>
@@ -187,6 +210,15 @@ function FieldRow({
           >
             <Lock className="h-3 w-3" aria-hidden />
             From environment
+          </span>
+        )}
+        {needsEncryptionKey && (
+          <span
+            className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 font-heading text-[10px] font-bold uppercase tracking-wider text-amber-800"
+            title="Secrets are encrypted before storage, and that needs CONFIG_ENCRYPTION_KEY in the environment."
+          >
+            <KeyRound className="h-3 w-3" aria-hidden />
+            Needs encryption key
           </span>
         )}
         {stored && field.secret && !cleared && (
@@ -228,7 +260,7 @@ function FieldRow({
             disabled={locked}
             placeholder={
               locked
-                ? 'Managed in the environment'
+                ? lockedPlaceholder
                 : stored && !cleared
                   ? 'Enter a new value to replace it'
                   : (field.placeholder ?? '')
@@ -244,7 +276,7 @@ function FieldRow({
           inputMode={field.type === 'number' ? 'numeric' : undefined}
           defaultValue={resolved.value ?? ''}
           disabled={locked}
-          placeholder={locked ? 'Managed in the environment' : (field.placeholder ?? '')}
+          placeholder={locked ? lockedPlaceholder : (field.placeholder ?? '')}
           className="mt-1.5"
         />
       )}

@@ -5,7 +5,7 @@ import { requireAdmin } from '@/lib/auth'
 import { getConfigForAdmin } from '@/lib/config'
 import { CONFIG_GROUPS } from '@/lib/config-registry'
 import { getRates } from '@/lib/currency'
-import { isEncryptionConfigured, ENCRYPTION_SETUP_HINT } from '@/lib/secret-box'
+import { isEncryptionConfigured } from '@/lib/secret-box'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,7 +37,6 @@ export default async function StoreSettingsPage() {
             group={group}
             resolved={resolved}
             encryptionReady={encryptionReady}
-            encryptionHint={ENCRYPTION_SETUP_HINT}
           />
         ))}
 
