@@ -574,7 +574,7 @@ export async function sendOrderFile(orderId: string): Promise<ActionState> {
   const session = await assertAdmin()
   if (!session) return DENIED
 
-  if (!isEmailConfigured()) {
+  if (!(await isEmailConfigured())) {
     return { status: 'error', message: EMAIL_SETUP_HINT }
   }
 
@@ -641,5 +641,5 @@ export async function sendOrderFile(orderId: string): Promise<ActionState> {
 
 /** Lets the orders page render the right controls without leaking env vars. */
 export async function emailStatus(): Promise<{ configured: boolean; hint: string }> {
-  return { configured: isEmailConfigured(), hint: EMAIL_SETUP_HINT }
+  return { configured: await isEmailConfigured(), hint: EMAIL_SETUP_HINT }
 }

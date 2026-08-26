@@ -155,7 +155,7 @@ export async function startCampaign(campaignId: string): Promise<CampaignState> 
   const session = await assertAdmin()
   if (!session) return DENIED
 
-  if (!isMailConfigured()) {
+  if (!(await isMailConfigured())) {
     return { status: 'error', message: mailSetupHint() }
   }
 

@@ -32,7 +32,7 @@ export default async function AdminOrdersPage({
   searchParams: { filter?: string }
 }) {
   await requireAdmin()
-  const emailConfigured = isEmailConfigured()
+  const emailConfigured = await isEmailConfigured()
   const filter = searchParams.filter === 'delivered' ? 'delivered' : searchParams.filter === 'all' ? 'all' : 'pending'
 
   let query = createAdminClient()

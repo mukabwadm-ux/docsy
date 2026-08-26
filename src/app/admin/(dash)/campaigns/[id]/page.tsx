@@ -57,7 +57,7 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
           campaignId={campaign.id}
           status={campaign.status}
           progress={progress}
-          mailReady={isMailConfigured()}
+          mailReady={await isMailConfigured()}
           mailHint={mailSetupHint()}
         />
       </div>

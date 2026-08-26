@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   const raw = await request.text()
   const signature = request.headers.get('x-paystack-signature')
 
-  if (!verifyWebhookSignature(raw, signature)) {
+  if (!(await verifyWebhookSignature(raw, signature))) {
     /**
      * 401 and stop. Without this check, anyone who knows the URL could post a
      * forged charge.success and be sent a paid product for free — the signature

@@ -1,3 +1,4 @@
+import { Analytics } from '@/components/analytics'
 import { SiteHeader } from '@/components/site-header'
 import { SiteFooter } from '@/components/site-footer'
 
@@ -11,6 +12,9 @@ export default function StorefrontLayout({ children }: { children: React.ReactNo
       <SiteHeader />
       <main className="flex-1">{children}</main>
       <SiteFooter />
+      {/* Storefront only. Tracking the owner clicking round the admin panel
+          pollutes every conversion figure it later reports on. */}
+      <Analytics />
     </div>
   )
 }

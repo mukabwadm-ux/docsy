@@ -19,7 +19,7 @@ import {
 
 export type { OutgoingEmail } from './mailer'
 
-export function isEmailConfigured() {
+export async function isEmailConfigured(): Promise<boolean> {
   return isMailConfigured()
 }
 

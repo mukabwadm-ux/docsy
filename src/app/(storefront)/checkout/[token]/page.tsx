@@ -64,7 +64,8 @@ export default async function CheckoutPage({
   const delivered = order.status === 'delivered'
   const cover = product?.preview_image_url ?? null
   const amountLabel = formatPrice(order.amount ?? 0, order.currency)
-  const canPay = isPaystackConfigured() && !paid && !expired && Number(order.amount ?? 0) > 0
+  const canPay =
+    (await isPaystackConfigured()) && !paid && !expired && Number(order.amount ?? 0) > 0
 
   return (
     <div className="container max-w-3xl py-10 lg:py-14">

@@ -140,7 +140,7 @@ export async function dryRun(audience: CampaignAudience) {
   return {
     recipients: Number(size ?? 0),
     sample: filtered.slice(0, 5).map((r) => r.email),
-    transport: activeTransport(),
+    transport: await activeTransport(),
   }
 }
 

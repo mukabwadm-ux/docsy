@@ -2,6 +2,8 @@ import 'server-only'
 
 import nodemailer, { type Transporter } from 'nodemailer'
 
+import { getConfigMany } from './config'
+
 /**
  * Mail transport, chosen at runtime.
  *
@@ -37,27 +39,76 @@ export interface OutgoingEmail {
 
 export type SendResult = { ok: true; via: MailTransport } | { ok: false; error: string }
 
-export function activeTransport(): MailTransport {
-  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) return 'smtp'
-  if (process.env.RESEND_API_KEY) return 'resend'
-  return 'none'
+export interface MailSettings {
+  transport: MailTransport
+  from: string | null
+  smtp: { host: string; port: number; user: string; pass: string; secure: boolean } | null
+  resendKey: string | null
 }
 
-/** Address every message is sent from, and replies go back to. */
-function fromAddress(): string | null {
-  return process.env.EMAIL_FROM ?? null
+const KEYS = [
+  'email.from',
+  'email.smtp_host',
+  'email.smtp_port',
+  'email.smtp_user',
+  'email.smtp_pass',
+  'email.resend_api_key',
+]
+
+/**
+ * Resolved mail settings, from the environment or the admin panel.
+ *
+ * Async because the values can now be set in Settings → Integrations. Every
+ * caller already sits in a server component, an action or a route handler.
+ */
+export async function mailSettings(): Promise<MailSettings> {
+  const c = await getConfigMany(KEYS)
+
+  const host = c['email.smtp_host']
+  const user = c['email.smtp_user']
+  const pass = c['email.smtp_pass']
+  const resendKey = c['email.resend_api_key']
+
+  const port = Number(c['email.smtp_port'] ?? 587) || 587
+  const secureOverride = process.env.SMTP_SECURE
+
+  const smtp =
+    host && user && pass
+      ? {
+          host,
+          port,
+          user,
+          pass,
+          /**
+           * 465 is implicit TLS; 587 and 25 start in the clear and upgrade with
+           * STARTTLS. Getting this backwards is the commonest SMTP mistake —
+           * secure:true on 587 hangs until timeout rather than failing clearly.
+           */
+          secure: secureOverride ? secureOverride === 'true' : port === 465,
+        }
+      : null
+
+  return {
+    // SMTP wins: anyone who configured a mail server means to use it.
+    transport: smtp ? 'smtp' : resendKey ? 'resend' : 'none',
+    from: c['email.from'],
+    smtp,
+    resendKey,
+  }
 }
 
-export function isMailConfigured() {
-  return activeTransport() !== 'none' && Boolean(fromAddress())
+export async function activeTransport(): Promise<MailTransport> {
+  return (await mailSettings()).transport
+}
+
+export async function isMailConfigured(): Promise<boolean> {
+  const s = await mailSettings()
+  return s.transport !== 'none' && Boolean(s.from)
 }
 
 /** Shown in the admin UI, and specific about what is missing. */
 export function mailSetupHint(): string {
-  if (!fromAddress()) {
-    return 'Set EMAIL_FROM (e.g. "Docsy <hello@docsy.imprinnt.co>") to send email.'
-  }
-  return 'Set SMTP_HOST, SMTP_USER and SMTP_PASS to send over your own mail server, or RESEND_API_KEY to send over Resend.'
+  return 'Add a From address plus either SMTP details or a Resend key in Settings → Integrations.'
 }
 
 /**
@@ -71,21 +122,8 @@ export function mailSetupHint(): string {
 let cachedTransporter: Transporter | null = null
 let cachedKey = ''
 
-function smtpTransporter(): Transporter {
-  const host = process.env.SMTP_HOST!
-  const port = Number(process.env.SMTP_PORT ?? 587)
-  const user = process.env.SMTP_USER!
-  const pass = process.env.SMTP_PASS!
-
-  /**
-   * 465 is implicit TLS; 587 and 25 start in the clear and upgrade with STARTTLS.
-   * Getting this backwards is the single most common SMTP misconfiguration —
-   * `secure: true` on 587 hangs until it times out rather than failing clearly.
-   */
-  const secure = process.env.SMTP_SECURE
-    ? process.env.SMTP_SECURE === 'true'
-    : port === 465
-
+function smtpTransporter(smtp: NonNullable<MailSettings['smtp']>): Transporter {
+  const { host, port, user, pass, secure } = smtp
   const key = `${host}:${port}:${secure}:${user}`
   if (cachedTransporter && cachedKey === key) return cachedTransporter
 
@@ -107,12 +145,12 @@ function smtpTransporter(): Transporter {
   return cachedTransporter
 }
 
-async function sendViaSmtp(message: OutgoingEmail): Promise<SendResult> {
+async function sendViaSmtp(message: OutgoingEmail, settings: MailSettings): Promise<SendResult> {
   try {
-    await smtpTransporter().sendMail({
-      from: fromAddress()!,
+    await smtpTransporter(settings.smtp!).sendMail({
+      from: settings.from!,
       to: message.to,
-      replyTo: fromAddress()!,
+      replyTo: settings.from!,
       subject: message.subject,
       text: message.text,
       html: message.html,
@@ -126,18 +164,18 @@ async function sendViaSmtp(message: OutgoingEmail): Promise<SendResult> {
   }
 }
 
-async function sendViaResend(message: OutgoingEmail): Promise<SendResult> {
+async function sendViaResend(message: OutgoingEmail, settings: MailSettings): Promise<SendResult> {
   try {
     const res = await fetch(RESEND_ENDPOINT, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        Authorization: `Bearer ${settings.resendKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: fromAddress(),
+        from: settings.from,
         to: [message.to],
-        reply_to: fromAddress(),
+        reply_to: settings.from,
         subject: message.subject,
         html: message.html,
         text: message.text,
@@ -163,13 +201,14 @@ async function sendViaResend(message: OutgoingEmail): Promise<SendResult> {
 }
 
 export async function sendMail(message: OutgoingEmail): Promise<SendResult> {
-  if (!fromAddress()) return { ok: false, error: mailSetupHint() }
+  const settings = await mailSettings()
+  if (!settings.from) return { ok: false, error: mailSetupHint() }
 
-  switch (activeTransport()) {
+  switch (settings.transport) {
     case 'smtp':
-      return sendViaSmtp(message)
+      return sendViaSmtp(message, settings)
     case 'resend':
-      return sendViaResend(message)
+      return sendViaResend(message, settings)
     default:
       return { ok: false, error: mailSetupHint() }
   }
@@ -182,13 +221,17 @@ export async function sendMail(message: OutgoingEmail): Promise<SendResult> {
  * surfaces as a failed delivery to a real buyer, and "wrong port" and "wrong
  * password" look identical from there.
  */
-export async function verifyTransport(): Promise<{ ok: true; via: MailTransport } | { ok: false; error: string }> {
-  const transport = activeTransport()
-  if (transport === 'none' || !fromAddress()) return { ok: false, error: mailSetupHint() }
+export async function verifyTransport(): Promise<
+  { ok: true; via: MailTransport } | { ok: false; error: string }
+> {
+  const settings = await mailSettings()
+  if (settings.transport === 'none' || !settings.from) {
+    return { ok: false, error: mailSetupHint() }
+  }
 
-  if (transport === 'smtp') {
+  if (settings.transport === 'smtp') {
     try {
-      await smtpTransporter().verify()
+      await smtpTransporter(settings.smtp!).verify()
       return { ok: true, via: 'smtp' }
     } catch (err) {
       const reason = err instanceof Error ? err.message : 'unknown error'

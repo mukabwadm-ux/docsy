@@ -34,7 +34,7 @@ export async function startPayment(
     return { status: 'error', message: 'That checkout link is not valid.' }
   }
 
-  if (!isPaystackConfigured()) {
+  if (!(await isPaystackConfigured())) {
     return { status: 'error', message: PAYSTACK_SETUP_HINT }
   }
 

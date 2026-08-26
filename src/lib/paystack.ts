@@ -2,6 +2,8 @@ import 'server-only'
 
 import crypto from 'node:crypto'
 
+import { getConfig } from './config'
+
 /**
  * Paystack, over the REST API.
  *
@@ -16,12 +18,21 @@ import crypto from 'node:crypto'
 
 const API = 'https://api.paystack.co'
 
-export function isPaystackConfigured() {
-  return Boolean(process.env.PAYSTACK_SECRET_KEY)
+/**
+ * Async because the key can come from the admin panel as well as the
+ * environment. Every caller is already in a server component or an action, so
+ * awaiting costs nothing.
+ */
+export async function secretKey(): Promise<string | null> {
+  return getConfig('paystack.secret_key')
+}
+
+export async function isPaystackConfigured(): Promise<boolean> {
+  return Boolean(await secretKey())
 }
 
 export const PAYSTACK_SETUP_HINT =
-  'Add PAYSTACK_SECRET_KEY (and PAYSTACK_PUBLIC_KEY) to take card and M-Pesa payments.'
+  'Add your Paystack secret key in Settings → Integrations to take card and M-Pesa payments.'
 
 /** Paystack works in the currency's smallest unit — cents, not units. */
 export function toSubunit(amount: number): number {
@@ -45,7 +56,7 @@ interface InitInput {
 export async function initializeTransaction(
   input: InitInput
 ): Promise<{ ok: true; authorizationUrl: string; reference: string } | { ok: false; error: string }> {
-  const key = process.env.PAYSTACK_SECRET_KEY
+  const key = await secretKey()
   if (!key) return { ok: false, error: PAYSTACK_SETUP_HINT }
 
   try {
@@ -110,7 +121,7 @@ export interface VerifiedCharge {
 export async function verifyTransaction(
   reference: string
 ): Promise<{ ok: true; charge: VerifiedCharge } | { ok: false; error: string }> {
-  const key = process.env.PAYSTACK_SECRET_KEY
+  const key = await secretKey()
   if (!key) return { ok: false, error: PAYSTACK_SETUP_HINT }
 
   try {
@@ -158,8 +169,11 @@ export async function verifyTransaction(
  * timingSafeEqual rather than === so the comparison does not leak, by how long it
  * takes, how much of a forged signature was correct.
  */
-export function verifyWebhookSignature(rawBody: string, signature: string | null): boolean {
-  const key = process.env.PAYSTACK_SECRET_KEY
+export async function verifyWebhookSignature(
+  rawBody: string,
+  signature: string | null
+): Promise<boolean> {
+  const key = await secretKey()
   if (!key || !signature) return false
 
   const expected = crypto.createHmac('sha512', key).update(rawBody, 'utf8').digest('hex')
