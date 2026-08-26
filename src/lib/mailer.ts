@@ -243,10 +243,32 @@ export function describeSmtpError(
     return `SMTP: ${target} refused the connection — the port is closed. Try 587, or 465 with SMTP_SECURE=true.`
   }
   if (code === 'EAUTH' || /auth|credential|password|535|534/i.test(raw)) {
+    /**
+     * Gmail rejects a normal account password outright: SMTP needs a 16-character
+     * App Password, which is a different secret from the one used to sign in.
+     * Worth saying explicitly, because the account password is not "wrong" in any
+     * way the user can see.
+     */
+    if (/gmail|googlemail/i.test(smtp.host)) {
+      return (
+        `SMTP: Gmail rejected the login for ${smtp.user}. Gmail does not accept your normal` +
+        ` account password over SMTP — it needs a 16-character App Password from` +
+        ` myaccount.google.com/apppasswords (two-step verification must be on first).` +
+        ` Paste it without spaces. (${raw})`
+      )
+    }
+    /**
+     * Otherwise the cause is genuinely ambiguous: a wrong password and a host that
+     * does not carry the domain produce the identical 535. Point at the check that
+     * tells them apart rather than inviting another password guess — repeated
+     * failed logins get the IP jailed by fail2ban on cPanel hosts.
+     */
     return (
-      `SMTP: ${target} accepted the connection but rejected the login. The username is` +
-      ` normally the full email address, and the mailbox has to exist on that server —` +
-      ` a domain pointed elsewhere often means the mailbox was never created. (${raw})`
+      `SMTP: ${target} accepted the connection but rejected the login. Either the password` +
+      ` is wrong, or this server does not host ${smtp.user.split('@')[1] ?? 'the domain'} —` +
+      ` both return the same error, and a cPanel mailbox lives on one specific server.` +
+      ` Run "npm run mail:diagnose" to tell the two apart without another login attempt.` +
+      ` (${raw})`
     )
   }
   /**
