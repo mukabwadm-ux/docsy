@@ -235,6 +235,11 @@ export async function sendBatch(campaignId: string): Promise<
       unsubscribeToken: profile.unsubscribe_token,
     })
 
+    /**
+     * No owner copy here, deliberately. A campaign to two hundred people would
+     * put two hundred copies in the owner's inbox, and on a shared mailbox it
+     * would leak the entire recipient list. Only transactional mail is copied.
+     */
     const result = await sendMail({
       to: row.email,
       // The campaign's own subject wins over the template's derived one.

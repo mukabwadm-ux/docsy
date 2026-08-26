@@ -94,16 +94,19 @@ export async function fulfilPaidOrder(input: {
     return { transitioned: true, delivered: false, message: `Paid, but no download link: ${signed.error}` }
   }
 
-  const sent = await sendEmail({
-    to: order.buyer_email,
-    ...deliveryEmail({
-      buyerName: order.buyer_name,
-      productTitle: product.title,
-      downloadUrl: signed.url,
-      expiresIn: describeExpiry(),
-      fileTypeLabel: product.file_type ? fileTypeLabel(product.file_type) : null,
-    }),
-  })
+  const sent = await sendEmail(
+    {
+      to: order.buyer_email,
+      ...deliveryEmail({
+        buyerName: order.buyer_name,
+        productTitle: product.title,
+        downloadUrl: signed.url,
+        expiresIn: describeExpiry(),
+        fileTypeLabel: product.file_type ? fileTypeLabel(product.file_type) : null,
+      }),
+    },
+    { copyToOwner: true }
+  )
 
   if (!sent.ok) {
     return { transitioned: true, delivered: false, message: `Paid, but the email failed: ${sent.error}` }

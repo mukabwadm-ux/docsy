@@ -107,6 +107,14 @@ export const CONFIG_GROUPS: ConfigGroup[] = [
         placeholder: 'Docsy <hello@docsy.imprinnt.co>',
       },
       {
+        key: 'email.copy_to',
+        label: 'Send me a copy of transaction emails',
+        hint: 'Every receipt and delivery email is blind-copied here, so you keep a record of each sale. Campaigns are never copied — a 200-person send would put 200 copies in your inbox. Leave blank for no copies.',
+        env: 'EMAIL_COPY_TO',
+        type: 'email',
+        placeholder: 'docsy@imprinnt.co',
+      },
+      {
         key: 'email.smtp_host',
         label: 'SMTP host',
         hint: 'From your hosting control panel, under mail client settings. Leave blank to use Resend instead.',

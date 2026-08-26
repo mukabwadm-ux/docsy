@@ -85,7 +85,10 @@ export async function sendOrderConfirmation(checkoutToken: string): Promise<
     accessLink: account.accessLink,
   })
 
-  const sent = await sendEmail({ to: row.buyer_email, ...message })
+  const sent = await sendEmail(
+    { to: row.buyer_email, ...message },
+    { copyToOwner: true }
+  )
   if (!sent.ok) return { ok: false, error: sent.error }
 
   return { ok: true, accountCreated: account.created }

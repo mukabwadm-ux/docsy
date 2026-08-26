@@ -15,7 +15,8 @@
     "currency:test": "node scripts/currency-test.mjs",
     "payment:test": "node scripts/payment-test.mjs",
     "campaign:test": "node scripts/campaign-test.mjs",
-    "config:test": "node scripts/config-test.mjs"
+    "config:test": "node scripts/config-test.mjs",
+    "bcc:test": "node scripts/bcc-test.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.23",

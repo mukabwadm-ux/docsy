@@ -6,6 +6,7 @@ import {
   mailSetupHint,
   sendMail,
   type OutgoingEmail,
+  type SendOptions,
   type SendResult,
 } from './mailer'
 
@@ -35,8 +36,11 @@ export function emailSetupHint() {
   return mailSetupHint()
 }
 
-export async function sendEmail(message: OutgoingEmail): Promise<SendResult> {
-  return sendMail(message)
+export async function sendEmail(
+  message: OutgoingEmail,
+  options: SendOptions = {}
+): Promise<SendResult> {
+  return sendMail(message, options)
 }
 
 /** Sends the fulfilment email for one order. */
@@ -44,5 +48,6 @@ export async function sendDeliveryEmail(
   input: DeliveryEmailInput & { to: string }
 ): Promise<SendResult> {
   const { to, ...rest } = input
-  return sendEmail({ to, ...deliveryEmail(rest) })
+  // A delivery is a business record, so the owner gets a copy.
+  return sendEmail({ to, ...deliveryEmail(rest) }, { copyToOwner: true })
 }

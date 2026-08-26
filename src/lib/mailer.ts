@@ -37,17 +37,33 @@ export interface OutgoingEmail {
   text: string
 }
 
+export interface SendOptions {
+  /**
+   * Blind-copy the owner, when a copy-to address is configured.
+   *
+   * Opt-in per message rather than applied inside sendMail, because the one thing
+   * that must never be copied is a campaign: a send to two hundred people would
+   * put two hundred copies in the owner's inbox and, on a shared mailbox, would
+   * also leak the whole recipient list. Transactional senders pass this; the
+   * campaign loop deliberately does not.
+   */
+  copyToOwner?: boolean
+}
+
 export type SendResult = { ok: true; via: MailTransport } | { ok: false; error: string }
 
 export interface MailSettings {
   transport: MailTransport
   from: string | null
+  /** Blind-copied on transactional mail only. Never on campaigns. */
+  copyTo: string | null
   smtp: { host: string; port: number; user: string; pass: string; secure: boolean } | null
   resendKey: string | null
 }
 
 const KEYS = [
   'email.from',
+  'email.copy_to',
   'email.smtp_host',
   'email.smtp_port',
   'email.smtp_user',
@@ -92,6 +108,7 @@ export async function mailSettings(): Promise<MailSettings> {
     // SMTP wins: anyone who configured a mail server means to use it.
     transport: smtp ? 'smtp' : resendKey ? 'resend' : 'none',
     from: c['email.from'],
+    copyTo: c['email.copy_to'],
     smtp,
     resendKey,
   }
@@ -145,11 +162,18 @@ function smtpTransporter(smtp: NonNullable<MailSettings['smtp']>): Transporter {
   return cachedTransporter
 }
 
-async function sendViaSmtp(message: OutgoingEmail, settings: MailSettings): Promise<SendResult> {
+async function sendViaSmtp(
+  message: OutgoingEmail,
+  settings: MailSettings,
+  bcc: string | null
+): Promise<SendResult> {
   try {
     await smtpTransporter(settings.smtp!).sendMail({
       from: settings.from!,
       to: message.to,
+      // Blind, not cc: the buyer has no reason to see the shop's own address on
+      // their receipt, and it invites replies to the wrong mailbox.
+      ...(bcc ? { bcc } : {}),
       replyTo: settings.from!,
       subject: message.subject,
       text: message.text,
@@ -164,7 +188,11 @@ async function sendViaSmtp(message: OutgoingEmail, settings: MailSettings): Prom
   }
 }
 
-async function sendViaResend(message: OutgoingEmail, settings: MailSettings): Promise<SendResult> {
+async function sendViaResend(
+  message: OutgoingEmail,
+  settings: MailSettings,
+  bcc: string | null
+): Promise<SendResult> {
   try {
     const res = await fetch(RESEND_ENDPOINT, {
       method: 'POST',
@@ -175,6 +203,7 @@ async function sendViaResend(message: OutgoingEmail, settings: MailSettings): Pr
       body: JSON.stringify({
         from: settings.from,
         to: [message.to],
+        ...(bcc ? { bcc: [bcc] } : {}),
         reply_to: settings.from,
         subject: message.subject,
         html: message.html,
@@ -200,15 +229,30 @@ async function sendViaResend(message: OutgoingEmail, settings: MailSettings): Pr
   }
 }
 
-export async function sendMail(message: OutgoingEmail): Promise<SendResult> {
+export async function sendMail(
+  message: OutgoingEmail,
+  options: SendOptions = {}
+): Promise<SendResult> {
   const settings = await mailSettings()
   if (!settings.from) return { ok: false, error: mailSetupHint() }
 
+  /**
+   * Skip the copy when it would go to the recipient anyway — the owner buying
+   * from their own shop, or testing with the copy address. A message with the
+   * same address in To and Bcc is delivered twice by most servers.
+   */
+  const bcc =
+    options.copyToOwner &&
+    settings.copyTo &&
+    settings.copyTo.toLowerCase() !== message.to.toLowerCase()
+      ? settings.copyTo
+      : null
+
   switch (settings.transport) {
     case 'smtp':
-      return sendViaSmtp(message, settings)
+      return sendViaSmtp(message, settings, bcc)
     case 'resend':
-      return sendViaResend(message, settings)
+      return sendViaResend(message, settings, bcc)
     default:
       return { ok: false, error: mailSetupHint() }
   }
