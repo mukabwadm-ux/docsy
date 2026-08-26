@@ -6,7 +6,8 @@ import { AlertCircle, ChevronDown, Download, Loader2, Lock, Zap } from 'lucide-r
 import { requestPurchase, type PurchaseState } from '@/actions/purchase'
 import { Button } from '@/components/ui/button'
 import { Input, Label, Textarea } from '@/components/ui/input'
-import { discountPercent, fileTypeLabel, formatFileSize, formatPriceOrFree } from '@/lib/format'
+import { discountPercent, fileTypeLabel, formatFileSize } from '@/lib/format'
+import { convert, formatMoney, type StoreRates } from '@/lib/currency'
 import type { Product } from '@/lib/types'
 
 const initial: PurchaseState = { status: 'idle' }
@@ -25,10 +26,13 @@ const initial: PurchaseState = { status: 'idle' }
  */
 export function BuyPanel({
   product,
+  rates,
   ctaLabel,
   id,
 }: {
   product: Product
+  /** Passed from the server so both currencies render without a fetch. */
+  rates: StoreRates
   ctaLabel?: string
   id?: string
 }) {
@@ -36,18 +40,21 @@ export function BuyPanel({
   const [showExtras, setShowExtras] = useState(false)
 
   const off = discountPercent(product.price, product.compare_at_price)
-  const price = formatPriceOrFree(product.price, product.currency)
 
   return (
     <div id={id} className="scroll-mt-24">
       <div className="flex flex-wrap items-end gap-3">
         <span className="font-heading text-4xl font-bold leading-none text-brand-heading">
-          {price}
+          <span data-price="USD">{formatMoney(product.price, 'USD')}</span>
+          <span data-price="KES">{formatMoney(convert(product.price, 'KES', rates), 'KES')}</span>
         </span>
         {product.compare_at_price && product.compare_at_price > product.price && (
           <>
             <span className="font-heading text-xl text-brand-body/50 line-through">
-              {formatPriceOrFree(product.compare_at_price, product.currency)}
+              <span data-price="USD">{formatMoney(product.compare_at_price, 'USD')}</span>
+              <span data-price="KES">
+                {formatMoney(convert(product.compare_at_price, 'KES', rates), 'KES')}
+              </span>
             </span>
             {off !== null && (
               <span className="rounded-full bg-brand-cta px-3 py-1 font-heading text-xs font-bold uppercase tracking-wider text-white">

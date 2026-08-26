@@ -1,10 +1,11 @@
 import Link from 'next/link'
 import { FileText, Globe, ShieldCheck, Zap } from 'lucide-react'
+import { CurrencySwitcher } from '@/components/currency-switcher'
 
 const TRUST = [
   { icon: Zap, label: 'Instant delivery', detail: 'Download link by email' },
   { icon: ShieldCheck, label: 'Secure checkout', detail: 'Your details stay private' },
-  { icon: Globe, label: 'Sold worldwide', detail: 'Priced in USD' },
+  { icon: Globe, label: 'Sold worldwide', detail: 'Pay in USD or KES' },
 ]
 
 export function SiteFooter() {
@@ -34,6 +35,8 @@ export function SiteFooter() {
               Docsy
             </span>
           </Link>
+
+          <CurrencySwitcher />
 
           <nav className="flex flex-wrap gap-x-6 gap-y-2">
             {[

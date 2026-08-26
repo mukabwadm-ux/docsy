@@ -2,8 +2,10 @@
 
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
+import { cookies, headers } from 'next/headers'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendOrderConfirmation } from '@/lib/order-email'
+import { CURRENCY_COOKIE, convert, getRates, resolveCurrency } from '@/lib/currency'
 
 /**
  * Opens a checkout and sends the buyer to it.
@@ -62,12 +64,29 @@ export async function requestPurchase(
   const { productId, email, name, note } = parsed.data
 
   /**
+   * Resolve the currency the buyer is actually looking at, then snapshot it onto
+   * the order along with the rate that produced it.
+   *
+   * Read here rather than accepted from the form: a posted currency or amount is
+   * a suggestion, and this is the number the buyer will be charged. The rate is
+   * stored too, so the arithmetic on a receipt can be re-checked later against
+   * the rate in force at the time rather than today's.
+   */
+  const rates = await getRates()
+  const currency = resolveCurrency(
+    headers().get('x-vercel-ip-country') ?? headers().get('cf-ipcountry'),
+    cookies().get(CURRENCY_COOKIE)?.value,
+    rates.geoPricingEnabled
+  )
+
+  /**
    * One round trip. open_checkout reads the price itself, refuses products that
    * are not active, and returns the existing token when this buyer already has
    * an open checkout for this product — so a double tap or a reload cannot
    * produce two pending orders for one purchase.
    */
-  const { data: token, error } = await createAdminClient().rpc('open_checkout', {
+  const db = createAdminClient()
+  const { data: token, error } = await db.rpc('open_checkout', {
     p_product_id: productId,
     p_email: email,
     p_name: name ?? null,
@@ -79,6 +98,32 @@ export async function requestPurchase(
   }
   if (!token) {
     return { status: 'error', message: 'This product is no longer available.' }
+  }
+
+  /**
+   * open_checkout() writes the USD price. Convert it for display and record all
+   * three numbers: what they pay, its USD equivalent, and the rate between them.
+   * Revenue everywhere sums base_amount, so a KES order never has to be
+   * back-converted at a later, different rate.
+   */
+  const { data: order } = await db
+    .from('manual_orders')
+    .select('id, amount, base_amount')
+    .eq('checkout_token', token)
+    .maybeSingle()
+
+  if (order) {
+    const row = order as { id: string; amount: number | null; base_amount: number | null }
+    const usd = Number(row.base_amount ?? row.amount ?? 0)
+    await db
+      .from('manual_orders')
+      .update({
+        base_amount: usd,
+        fx_rate: currency === 'KES' ? rates.usdToKes : 1,
+        amount: convert(usd, currency, rates),
+        currency,
+      })
+      .eq('id', row.id)
   }
 
   /**

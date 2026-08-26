@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { formatPriceOrFree } from '@/lib/format'
+import { convert, formatMoney, type StoreRates } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 
 /**
@@ -15,12 +15,12 @@ import { cn } from '@/lib/utils'
  */
 export function StickyCta({
   price,
-  currency,
+  rates,
   targetId,
   watchId,
 }: {
   price: number
-  currency: string
+  rates: StoreRates
   /** Element the button scrolls to — the real buy panel. */
   targetId: string
   /** Element whose visibility suppresses the bar. */
@@ -60,7 +60,8 @@ export function StickyCta({
       <div className="flex items-center gap-3">
         <div className="min-w-0">
           <p className="font-heading text-xl font-bold leading-none text-brand-heading">
-            {formatPriceOrFree(price, currency)}
+            <span data-price="USD">{formatMoney(price, 'USD')}</span>
+            <span data-price="KES">{formatMoney(convert(price, 'KES', rates), 'KES')}</span>
           </p>
           <p className="mt-0.5 font-heading text-[10px] font-bold uppercase tracking-wider text-brand-body/70">
             Instant download

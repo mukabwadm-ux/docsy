@@ -92,8 +92,8 @@ export async function getInsights(): Promise<InsightsData> {
       )
       .neq('status', 'archived')
       .order('views_count', { ascending: false }),
-    db.from('manual_orders').select('product_id, amount, status'),
-    db.from('orders').select('product_id, amount, status').eq('status', 'paid'),
+    db.from('manual_orders').select('product_id, amount, base_amount, status'),
+    db.from('orders').select('product_id, amount, base_amount, status').eq('status', 'paid'),
     db
       .from('search_queries')
       .select('normalized, sample, hits, result_count, last_seen')
@@ -110,17 +110,22 @@ export async function getInsights(): Promise<InsightsData> {
     map.set(key, (map.get(key) ?? 0) + by)
   }
 
-  for (const o of (manualRows.data as { product_id: string | null; amount: number | null; status: string }[]) ?? []) {
+  // Revenue is summed from base_amount, the USD equivalent, so a KES order and a
+  // USD one are comparable. `amount` is what was charged, not a common unit.
+  type Row = { product_id: string | null; amount: number | null; base_amount: number | null; status?: string }
+  const usdOf = (o: Row) => Number(o.base_amount ?? o.amount ?? 0)
+
+  for (const o of (manualRows.data as Row[]) ?? []) {
     bump(orderCount, o.product_id)
     if (o.status === 'delivered') {
       bump(completedCount, o.product_id)
-      bump(revenue, o.product_id, Number(o.amount ?? 0))
+      bump(revenue, o.product_id, usdOf(o))
     }
   }
-  for (const o of (gatewayRows.data as { product_id: string | null; amount: number | null }[]) ?? []) {
+  for (const o of (gatewayRows.data as Row[]) ?? []) {
     bump(orderCount, o.product_id)
     bump(completedCount, o.product_id)
-    bump(revenue, o.product_id, Number(o.amount ?? 0))
+    bump(revenue, o.product_id, usdOf(o))
   }
 
   const products: ProductPerformance[] = (

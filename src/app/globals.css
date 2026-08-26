@@ -75,6 +75,19 @@
 }
 
 @layer components {
+  /* Prices render in both currencies and CSS picks one. Default is USD, so a
+     visitor with JavaScript disabled — or the instant before the inline script
+     runs — still sees exactly one price rather than two or none. */
+  [data-price='KES'] {
+    display: none;
+  }
+  :root[data-currency='KES'] [data-price='KES'] {
+    display: inline;
+  }
+  :root[data-currency='KES'] [data-price='USD'] {
+    display: none;
+  }
+
   /* Reserve the image box before the pixels land. With next/image fill, this
      is what holds CLS at zero across the catalog grid. */
   .aspect-cover {

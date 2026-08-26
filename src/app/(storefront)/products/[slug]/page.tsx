@@ -21,6 +21,7 @@ import {
   getReviews,
 } from '@/lib/queries'
 import { getBuyerSession } from '@/lib/buyer'
+import { getRates } from '@/lib/currency'
 import { getWishlistIds } from '@/lib/account-data'
 
 export const revalidate = 60
@@ -73,13 +74,14 @@ export default async function ProductPage({ params }: { params: { slug: string }
   const product = await getProductBySlug(params.slug)
   if (!product) notFound()
 
-  const [reviews, related, buyer] = await Promise.all([
+  const [reviews, related, buyer, rates] = await Promise.all([
     getReviews(product.id),
     getRelatedProducts(product),
     // Reading the session makes this route dynamic, which is why the page keeps
     // its own `revalidate` for the anonymous case and the saved state is the only
     // per-visitor bit rendered here.
     getBuyerSession(),
+    getRates(),
   ])
   const savedIds = buyer ? await getWishlistIds(buyer.userId) : new Set<string>()
 
@@ -173,7 +175,7 @@ export default async function ProductPage({ params }: { params: { slug: string }
             )}
 
             <div className="mt-6">
-              <BuyPanel product={product} id="buy" />
+              <BuyPanel product={product} rates={rates} id="buy" />
             </div>
 
             <div className="mt-4">
@@ -273,12 +275,7 @@ export default async function ProductPage({ params }: { params: { slug: string }
       {/* Extra bottom room so the sticky bar never covers the footer links. */}
       <div className="h-20 md:hidden" aria-hidden />
 
-      <StickyCta
-        price={product.price}
-        currency={product.currency}
-        targetId="buy"
-        watchId="product-hero"
-      />
+      <StickyCta price={product.price} rates={rates} targetId="buy" watchId="product-hero" />
     </>
   )
 }

@@ -56,6 +56,21 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${oswald.variable} ${lora.variable}`}>
+      <head>
+        {/*
+          Applies the visitor's currency before first paint.
+
+          Inline and synchronous on purpose: prices are server-rendered in both
+          currencies and CSS hides one, so this attribute has to exist before the
+          browser paints or a KES visitor sees dollars for a frame. The cookie is
+          set at the edge by middleware from the request's country.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var m=document.cookie.match(/(?:^|; )docsy_currency=([^;]*)/);var c=m?decodeURIComponent(m[1]):'USD';if(c==='KES'){document.documentElement.setAttribute('data-currency','KES')}}catch(e){}})()`,
+          }}
+        />
+      </head>
       <body>{children}</body>
     </html>
   )

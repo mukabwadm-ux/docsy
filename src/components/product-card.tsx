@@ -4,10 +4,12 @@ import { FileText } from 'lucide-react'
 import { StarRating } from '@/components/star-rating'
 import { WishlistButton } from '@/components/wishlist-button'
 import { Badge } from '@/components/ui/badge'
-import { discountPercent, fileTypeLabel, formatPriceOrFree } from '@/lib/format'
+import { Price } from '@/components/price'
+import { discountPercent, fileTypeLabel } from '@/lib/format'
+import { getRates } from '@/lib/currency'
 import type { Product } from '@/lib/types'
 
-export function ProductCard({
+export async function ProductCard({
   product,
   priority = false,
   savedInWishlist = false,
@@ -18,6 +20,8 @@ export function ProductCard({
 }) {
   const cover = product.preview_image_url ?? product.product_images?.[0]?.image_url ?? null
   const off = discountPercent(product.price, product.compare_at_price)
+  // Cached by the shared public client, so a grid of cards costs one fetch.
+  const rates = await getRates()
 
   return (
     <Link
@@ -79,13 +83,18 @@ export function ProductCard({
         )}
 
         <div className="mt-auto flex items-end gap-2 pt-3">
-          <span className="font-heading text-xl font-bold text-brand-heading">
-            {formatPriceOrFree(product.price, product.currency)}
-          </span>
+          <Price
+            usd={product.price}
+            rates={rates}
+            className="font-heading text-xl font-bold text-brand-heading"
+          />
           {product.compare_at_price && product.compare_at_price > product.price && (
-            <span className="font-heading text-sm text-brand-body/60 line-through">
-              {formatPriceOrFree(product.compare_at_price, product.currency)}
-            </span>
+            <Price
+              usd={product.compare_at_price}
+              rates={rates}
+              strike
+              className="font-heading text-sm text-brand-body/60"
+            />
           )}
         </div>
       </div>

@@ -4,6 +4,7 @@ import {
   Contact,
   Mail,
   Megaphone,
+  Settings,
   FileText,
   FolderTree,
   LayoutDashboard,
@@ -26,6 +27,7 @@ const NAV = [
   { href: '/admin/emails', label: 'Emails', icon: Mail },
   { href: '/admin/campaigns', label: 'Campaigns', icon: Megaphone },
   { href: '/admin/categories', label: 'Categories', icon: FolderTree },
+  { href: '/admin/settings', label: 'Settings', icon: Settings },
 ] as const
 
 /**

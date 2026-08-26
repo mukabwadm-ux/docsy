@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, FileText, FolderTree, Loader2, Search } from 'lucide-react'
-import { fileTypeLabel, formatPriceOrFree } from '@/lib/format'
+import { fileTypeLabel } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 interface Suggestion {
@@ -17,6 +17,8 @@ interface Suggestion {
   preview_image_url: string | null
   rating_avg: number
   rating_count: number
+  priceUsd: string
+  priceKes: string
 }
 
 interface CategoryHit {
@@ -334,7 +336,8 @@ export function SearchAutocomplete({
                   </span>
 
                   <span className="shrink-0 font-heading text-sm font-bold text-brand-heading">
-                    {formatPriceOrFree(item.price, item.currency)}
+                    <span data-price="USD">{item.priceUsd}</span>
+                    <span data-price="KES">{item.priceKes}</span>
                   </span>
                 </button>
               </li>

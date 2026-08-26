@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { searchSuggestions } from '@/lib/queries'
+import { convert, formatMoney, getRates } from '@/lib/currency'
 
 /**
  * Typeahead endpoint.
@@ -25,7 +26,10 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { products, categories } = await searchSuggestions(q, LIMIT)
+    const [{ products, categories }, rates] = await Promise.all([
+      searchSuggestions(q, LIMIT),
+      getRates(),
+    ])
 
     return NextResponse.json(
       {
@@ -37,6 +41,10 @@ export async function GET(request: Request) {
           slug: p.slug,
           price: p.price,
           currency: p.currency,
+          // Both formatted here so the dropdown never does currency maths, and
+          // never disagrees with the card behind it.
+          priceUsd: formatMoney(p.price, 'USD'),
+          priceKes: formatMoney(convert(p.price, 'KES', rates), 'KES'),
           file_type: p.file_type,
           preview_image_url: p.preview_image_url,
           rating_avg: p.rating_avg,

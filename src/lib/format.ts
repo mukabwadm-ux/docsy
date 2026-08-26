@@ -14,11 +14,12 @@ const usd = new Intl.NumberFormat('en-US', {
 export function formatPrice(value: number | null | undefined, currency = 'USD') {
   if (value === null || value === undefined) return '—'
   if (currency !== 'USD') {
-    return new Intl.NumberFormat('en-US', {
+    const whole = currency === 'KES'
+    return new Intl.NumberFormat(whole ? 'en-KE' : 'en-US', {
       style: 'currency',
       currency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: whole ? 0 : 2,
+      maximumFractionDigits: whole ? 0 : 2,
     }).format(value)
   }
   return usd.format(value)

@@ -40,22 +40,31 @@ export default async function AdminDashboard() {
      * has actually been sent. A pending row is an intention, and counting it
      * would inflate the one number on this page that decisions get made on.
      */
-    db.from('manual_orders').select('amount, created_at').eq('status', 'delivered'),
+    db.from('manual_orders').select('amount, base_amount, created_at').eq('status', 'delivered'),
     // Money promised but not yet earned. Kept separate rather than folded into
     // the total, so the headline figure never overstates what has been settled.
-    db.from('manual_orders').select('amount').eq('status', 'pending'),
+    db.from('manual_orders').select('amount, base_amount').eq('status', 'pending'),
     // Phase 2: real gateway orders. Summed now so the total does not appear to
     // reset the day checkout goes live and manual orders stop being created.
-    db.from('orders').select('amount').eq('status', 'paid'),
+    db.from('orders').select('amount, base_amount').eq('status', 'paid'),
   ])
 
-  const sum = (rows: { amount: number | null }[] | null) =>
-    (rows ?? []).reduce((total, r) => total + Number(r.amount ?? 0), 0)
+  /**
+   * Always the USD base, never `amount`.
+   *
+   * `amount` is what the buyer was charged, which may be shillings. Adding those
+   * to dollars produces a number that looks plausible and means nothing —
+   * base_amount exists precisely so every total is in one currency.
+   */
+  const sum = (rows: { amount: number | null; base_amount: number | null }[] | null) =>
+    (rows ?? []).reduce((total, r) => total + Number(r.base_amount ?? r.amount ?? 0), 0)
 
-  const deliveredRows = (collectedManual.data as { amount: number | null; created_at: string }[]) ?? []
+  type MoneyRow = { amount: number | null; base_amount: number | null; created_at: string }
+  const deliveredRows = (collectedManual.data as MoneyRow[]) ?? []
 
-  const collected = sum(deliveredRows) + sum(collectedGateway.data as { amount: number | null }[])
-  const awaiting = sum(pendingManual.data as { amount: number | null }[])
+  const collected =
+    sum(deliveredRows) + sum(collectedGateway.data as MoneyRow[])
+  const awaiting = sum(pendingManual.data as MoneyRow[])
   const completedCount = deliveredRows.length + ((collectedGateway.data as unknown[]) ?? []).length
 
   // Rolling 30 days, so the headline total has something to be read against —
@@ -63,7 +72,7 @@ export default async function AdminDashboard() {
   const thirtyDaysAgo = Date.now() - 30 * 86400000
   const last30 = deliveredRows
     .filter((r) => new Date(r.created_at).getTime() >= thirtyDaysAgo)
-    .reduce((total, r) => total + Number(r.amount ?? 0), 0)
+    .reduce((total, r) => total + Number(r.base_amount ?? r.amount ?? 0), 0)
 
   interface OrderRow {
     id: string
