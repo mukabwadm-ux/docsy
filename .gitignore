@@ -49,3 +49,5 @@ desktop.ini
 # Local product files (source assets, not for the repo)
 /uploads/
 /assets-local/
+
+.vercel
