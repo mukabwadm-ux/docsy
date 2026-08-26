@@ -5,7 +5,7 @@ import { assertAdmin } from '@/lib/auth'
 import { setConfig } from '@/lib/config'
 import { CONFIG_FIELDS, CONFIG_GROUPS, type ConfigGroupId } from '@/lib/config-registry'
 import { isEncryptionConfigured, maskSecret } from '@/lib/secret-box'
-import { verifyTransport } from '@/lib/mailer'
+import { mailSettings, verifyTransport } from '@/lib/mailer'
 import { isPaystackConfigured, secretKey } from '@/lib/paystack'
 
 export interface ConfigState {
@@ -113,10 +113,28 @@ export async function testEmailConnection(): Promise<ConfigState> {
   const session = await assertAdmin()
   if (!session) return DENIED
 
+  /**
+   * Report what is about to be attempted, not just the outcome.
+   *
+   * A connection failure is nearly always a wrong host or port, and seeing the
+   * exact target echoed back catches a typo immediately — whereas "connection
+   * timeout" alone sends people to check their password.
+   */
+  const settings = await mailSettings()
+  const target =
+    settings.transport === 'smtp' && settings.smtp
+      ? `${settings.smtp.host}:${settings.smtp.port} (TLS ${settings.smtp.secure ? 'implicit' : 'STARTTLS'})`
+      : settings.transport === 'resend'
+        ? 'Resend API'
+        : 'nothing configured'
+
   const result = await verifyTransport()
   return result.ok
-    ? { status: 'success', message: `Mail server reachable and credentials accepted (via ${result.via}).` }
-    : { status: 'error', message: result.error }
+    ? {
+        status: 'success',
+        message: `Connected to ${target} and the credentials were accepted. Sending from ${settings.from}.`,
+      }
+    : { status: 'error', message: `Tried ${target}. ${result.error}` }
 }
 
 /**

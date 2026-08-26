@@ -154,9 +154,14 @@ function smtpTransporter(smtp: NonNullable<MailSettings['smtp']>): Transporter {
     // Most shared hosts cap messages per connection; recycling avoids a silent
     // mid-campaign stall.
     maxMessages: 50,
-    connectionTimeout: 15000,
-    greetingTimeout: 10000,
-    socketTimeout: 20000,
+    /**
+     * Shorter than the platform's function limit on purpose. If the connect
+     * timeout outlives the invocation, the request is killed before nodemailer
+     * can report anything and the admin sees a generic 500 instead of the reason.
+     */
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 15000,
   })
   cachedKey = key
   return cachedTransporter
@@ -181,11 +186,59 @@ async function sendViaSmtp(
     })
     return { ok: true, via: 'smtp' }
   } catch (err) {
-    const reason = err instanceof Error ? err.message : 'unknown error'
-    // A rejected recipient and a wrong password both land here; the message from
-    // the server is the only thing that distinguishes them, so pass it through.
-    return { ok: false, error: `SMTP: ${reason}` }
+    return { ok: false, error: describeSmtpError(err, settings.smtp!) }
   }
+}
+
+/**
+ * Turns an SMTP failure into something actionable.
+ *
+ * "Connection timeout" on its own says nothing about what was attempted, and the
+ * three things it usually means — wrong host, wrong port, or a firewall between
+ * the app and the mail server — need completely different fixes. Naming the
+ * target and the likely cause is the difference between a five-minute check and
+ * an afternoon.
+ */
+export function describeSmtpError(
+  err: unknown,
+  smtp: NonNullable<MailSettings['smtp']>
+): string {
+  const raw = err instanceof Error ? err.message : 'unknown error'
+  const code = (err as { code?: string })?.code ?? ''
+  const target = `${smtp.host}:${smtp.port}`
+
+  // Connect never completed: nothing to do with credentials.
+  if (code === 'ETIMEDOUT' || code === 'ESOCKET' || /timeout/i.test(raw)) {
+    const secureHint =
+      smtp.secure && smtp.port !== 465
+        ? ` Port ${smtp.port} is being used with implicit TLS, which hangs — set SMTP_SECURE=false or use port 465.`
+        : !smtp.secure && smtp.port === 465
+          ? ' Port 465 needs implicit TLS — set SMTP_SECURE=true.'
+          : ''
+    return (
+      `SMTP: could not connect to ${target} (${code || 'timeout'}).` +
+      secureHint +
+      ' The host and port are reachable from nowhere, or a firewall is blocking it —' +
+      ' shared hosts often refuse SMTP from cloud providers, and port 25 is blocked' +
+      ' almost everywhere. Check the exact hostname in your mail client settings;' +
+      ' it is frequently not mail.yourdomain.com.'
+    )
+  }
+
+  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') {
+    return `SMTP: the hostname ${smtp.host} does not resolve. Check it for typos.`
+  }
+  if (code === 'ECONNREFUSED') {
+    return `SMTP: ${target} refused the connection — the port is closed. Try 587, or 465 with SMTP_SECURE=true.`
+  }
+  if (code === 'EAUTH' || /auth|credential|password|535|534/i.test(raw)) {
+    return `SMTP: ${target} rejected the credentials. The username is usually the full email address. (${raw})`
+  }
+  if (/self.signed|certificate|CERT_/i.test(raw)) {
+    return `SMTP: ${target} presented a certificate that could not be verified (${raw}).`
+  }
+
+  return `SMTP: ${target} — ${raw}`
 }
 
 async function sendViaResend(
@@ -276,10 +329,12 @@ export async function verifyTransport(): Promise<
   if (settings.transport === 'smtp') {
     try {
       await smtpTransporter(settings.smtp!).verify()
-      return { ok: true, via: 'smtp' }
+      return {
+        ok: true,
+        via: 'smtp',
+      }
     } catch (err) {
-      const reason = err instanceof Error ? err.message : 'unknown error'
-      return { ok: false, error: `SMTP: ${reason}` }
+      return { ok: false, error: describeSmtpError(err, settings.smtp!) }
     }
   }
 
