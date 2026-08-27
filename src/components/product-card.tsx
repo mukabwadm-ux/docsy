@@ -12,7 +12,9 @@ import type { Product } from '@/lib/types'
 export async function ProductCard({
   product,
   priority = false,
-  savedInWishlist = false,
+  // No default: passing an explicit false would stop WishlistButton resolving
+  // its own state, which is what lets a page stay statically prerendered.
+  savedInWishlist,
 }: {
   product: Product
   priority?: boolean

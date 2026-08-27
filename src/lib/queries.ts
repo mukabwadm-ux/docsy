@@ -1,3 +1,4 @@
+import { cachedRead, TAGS, TTL } from './cache'
 import { publicDb } from './supabase/public'
 import type {
   CatalogSort,
@@ -63,7 +64,7 @@ const SORT_MAP: Record<CatalogSort, { column: string; ascending: boolean }> = {
 
 // ------------------------------------------------------------------ catalog
 
-export async function getCategories(): Promise<Category[]> {
+async function getCategoriesUncached(): Promise<Category[]> {
   const { data } = await publicDb
     .from('categories')
     .select('id, name, slug, description, icon, sort_order')
@@ -73,9 +74,11 @@ export async function getCategories(): Promise<Category[]> {
 }
 
 /** Category list with a live count of active products, for the homepage grid. */
-export async function getCategoriesWithCounts() {
+async function getCategoriesWithCountsUncached() {
   const [categories, { data: rows }] = await Promise.all([
-    getCategories(),
+    // The raw read, not the cached export: nesting one data cache inside another
+    // makes the inner entry's tags ambiguous, and this function has its own.
+    getCategoriesUncached(),
     publicDb.from('products').select('category_id').eq('status', 'active'),
   ])
 
@@ -87,7 +90,7 @@ export async function getCategoriesWithCounts() {
   return categories.map((c) => ({ ...c, product_count: counts.get(c.id) ?? 0 }))
 }
 
-export async function getFeaturedProducts(limit = 8): Promise<Product[]> {
+async function getFeaturedProductsUncached(limit = 8): Promise<Product[]> {
   const { data } = await publicDb
     .from('products')
     .select(CARD_COLUMNS)
@@ -98,7 +101,7 @@ export async function getFeaturedProducts(limit = 8): Promise<Product[]> {
   return ((data as Record<string, unknown>[]) ?? []).map(normalise)
 }
 
-export async function getLatestProducts(limit = 8): Promise<Product[]> {
+async function getLatestProductsUncached(limit = 8): Promise<Product[]> {
   const { data } = await publicDb
     .from('products')
     .select(CARD_COLUMNS)
@@ -117,7 +120,7 @@ export interface CatalogParams {
   maxPrice?: number
 }
 
-export async function getCatalog({
+async function getCatalogUncached({
   category,
   sort = 'newest',
   page = 1,
@@ -173,7 +176,7 @@ export async function getCatalog({
 
 // ------------------------------------------------------------------ product
 
-export async function getProductBySlug(slug: string): Promise<Product | null> {
+async function getProductBySlugUncached(slug: string): Promise<Product | null> {
   const { data } = await publicDb
     .from('products')
     .select(
@@ -194,7 +197,7 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
   return product
 }
 
-export async function getAllProductSlugs(): Promise<{ slug: string }[]> {
+async function getAllProductSlugsUncached(): Promise<{ slug: string }[]> {
   const { data } = await publicDb.from('products').select('slug').eq('status', 'active')
   return (data as { slug: string }[]) ?? []
 }
@@ -246,7 +249,7 @@ export async function getRelatedProducts(product: Product, limit = 4): Promise<P
 
 // ------------------------------------------------------------------ reviews
 
-export async function getReviews(productId: string, limit = 24): Promise<Review[]> {
+async function getReviewsUncached(productId: string, limit = 24): Promise<Review[]> {
   const { data } = await publicDb
     .from('reviews')
     .select(
@@ -355,3 +358,54 @@ async function substringSearch(q: string, limit: number): Promise<Product[]> {
 
   return ((data as Record<string, unknown>[]) ?? []).map(normalise)
 }
+
+// ---------------------------------------------------------------- caching
+
+/**
+ * The reads above, wrapped in the data cache.
+ *
+ * Exported under the original names so callers are unchanged. The search reads
+ * are deliberately absent: their key is an arbitrary query string, so caching
+ * them would fill the cache with single-use entries. getRelatedProducts is out
+ * for the same reason - it takes a whole product as its argument, which would be
+ * serialised into the key.
+ */
+export const getCategories = cachedRead(getCategoriesUncached, ['getCategories'], {
+  tags: [TAGS.categories],
+  revalidate: TTL.categories,
+})
+
+export const getCategoriesWithCounts = cachedRead(getCategoriesWithCountsUncached, ['getCategoriesWithCounts'], {
+  tags: [TAGS.categories, TAGS.products],
+  revalidate: TTL.categories,
+})
+
+export const getFeaturedProducts = cachedRead(getFeaturedProductsUncached, ['getFeaturedProducts'], {
+  tags: [TAGS.products],
+  revalidate: TTL.products,
+})
+
+export const getLatestProducts = cachedRead(getLatestProductsUncached, ['getLatestProducts'], {
+  tags: [TAGS.products],
+  revalidate: TTL.products,
+})
+
+export const getCatalog = cachedRead(getCatalogUncached, ['getCatalog'], {
+  tags: [TAGS.products],
+  revalidate: TTL.products,
+})
+
+export const getProductBySlug = cachedRead(getProductBySlugUncached, ['getProductBySlug'], {
+  tags: [TAGS.products],
+  revalidate: TTL.products,
+})
+
+export const getAllProductSlugs = cachedRead(getAllProductSlugsUncached, ['getAllProductSlugs'], {
+  tags: [TAGS.products],
+  revalidate: TTL.products,
+})
+
+export const getReviews = cachedRead(getReviewsUncached, ['getReviews'], {
+  tags: [TAGS.reviews, TAGS.products],
+  revalidate: TTL.reviews,
+})

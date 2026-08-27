@@ -1,4 +1,5 @@
 import { publicDb } from './supabase/public'
+import { cachedRead, TAGS, TTL } from './cache'
 
 export type Currency = 'USD' | 'KES'
 
@@ -30,7 +31,7 @@ const FALLBACK: StoreRates = {
  * a per-request round trip. A stale-by-a-minute rate is fine; the amount a buyer
  * is actually charged is recomputed and snapshotted server-side at checkout.
  */
-export async function getRates(): Promise<StoreRates> {
+async function getRatesUncached(): Promise<StoreRates> {
   const { data } = await publicDb
     .from('store_settings')
     .select('usd_to_kes, kes_rounding, geo_pricing_enabled, rate_updated_at')
@@ -53,6 +54,16 @@ export async function getRates(): Promise<StoreRates> {
     rateUpdatedAt: row.rate_updated_at,
   }
 }
+
+/**
+ * Cached: the rate is one row of store settings, identical for every visitor, and
+ * it is read by every product card in a grid as well as by each product page.
+ */
+export const getRates = cachedRead(getRatesUncached, ['getRates'], {
+  tags: [TAGS.config],
+  revalidate: TTL.config,
+})
+
 
 /**
  * Converts a USD price for display.

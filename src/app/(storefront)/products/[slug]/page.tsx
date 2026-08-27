@@ -20,9 +20,7 @@ import {
   getRelatedProducts,
   getReviews,
 } from '@/lib/queries'
-import { getBuyerSession } from '@/lib/buyer'
 import { getRates } from '@/lib/currency'
-import { getWishlistIds } from '@/lib/account-data'
 
 export const revalidate = 60
 export const dynamicParams = true
@@ -74,16 +72,19 @@ export default async function ProductPage({ params }: { params: { slug: string }
   const product = await getProductBySlug(params.slug)
   if (!product) notFound()
 
-  const [reviews, related, buyer, rates] = await Promise.all([
+  const [reviews, related, rates] = await Promise.all([
     getReviews(product.id),
     getRelatedProducts(product),
-    // Reading the session makes this route dynamic, which is why the page keeps
-    // its own `revalidate` for the anonymous case and the saved state is the only
-    // per-visitor bit rendered here.
-    getBuyerSession(),
+    /**
+     * The session is deliberately NOT read here. This is the page that converts,
+     * and in Next 14 one cookies() call anywhere in the tree turns the whole route
+     * dynamic - which cost this page its prerendering and made every visitor wait
+     * on a render plus database round trips. The only per-visitor thing on it was
+     * the wishlist heart, so WishlistButton now resolves that itself after mount
+     * via /api/wishlist.
+     */
     getRates(),
   ])
-  const savedIds = buyer ? await getWishlistIds(buyer.userId) : new Set<string>()
 
   const category = product.categories
 
@@ -181,7 +182,6 @@ export default async function ProductPage({ params }: { params: { slug: string }
             <div className="mt-4">
               <WishlistButton
                 productId={product.id}
-                saved={savedIds.has(product.id)}
                 variant="full"
                 returnTo={`/products/${product.slug}`}
               />
@@ -265,7 +265,7 @@ export default async function ProductPage({ params }: { params: { slug: string }
             <h2 className="text-2xl sm:text-3xl">You might also like</h2>
             <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-6">
               {related.map((p) => (
-                <ProductCard key={p.id} product={p} savedInWishlist={savedIds.has(p.id)} />
+                <ProductCard key={p.id} product={p} />
               ))}
             </div>
           </div>

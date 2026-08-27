@@ -1,8 +1,9 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { assertAdmin } from '@/lib/auth'
 import { setConfig } from '@/lib/config'
+import { TAGS } from '@/lib/cache'
 import { CONFIG_FIELDS, CONFIG_GROUPS, type ConfigGroupId } from '@/lib/config-registry'
 import { isEncryptionConfigured, maskSecret } from '@/lib/secret-box'
 import { mailSettings, verifyTransport } from '@/lib/mailer'
@@ -77,6 +78,7 @@ export async function saveConfigGroup(
    * be rebuilt for a new tag to appear. Cheap here, and the alternative is the
    * owner adding a pixel and concluding it does not work.
    */
+  revalidateTag(TAGS.config)
   revalidatePath('/', 'layout')
   revalidatePath('/admin/settings')
 
@@ -97,6 +99,7 @@ export async function clearConfigValue(key: string): Promise<ConfigState> {
   const result = await setConfig(key, '', session.userId)
   if (!result.ok) return { status: 'error', message: result.error }
 
+  revalidateTag(TAGS.config)
   revalidatePath('/', 'layout')
   revalidatePath('/admin/settings')
   return { status: 'success', message: `${field.label} cleared.` }

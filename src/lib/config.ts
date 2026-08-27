@@ -4,6 +4,7 @@ import { cache } from 'react'
 import { createAdminClient } from './supabase/admin'
 import { decryptSecret, encryptSecret, isEncryptionConfigured, maskSecret } from './secret-box'
 import { CONFIG_FIELDS, isKnownConfigKey, isSecretKey } from './config-registry'
+import { cachedRead, TAGS, TTL } from './cache'
 
 /**
  * Resolved configuration: environment variables first, then the database.
@@ -174,7 +175,7 @@ export async function setConfig(
 // ------------------------------------------------------- typed conveniences
 
 /** Analytics IDs for the storefront. Public by nature. */
-export async function getAnalyticsConfig() {
+async function getAnalyticsConfigUncached() {
   const c = await getConfigMany([
     'analytics.ga4_id',
     'analytics.gtm_id',
@@ -188,3 +189,17 @@ export async function getAnalyticsConfig() {
     tiktokPixel: c['analytics.tiktok_pixel_id'],
   }
 }
+
+/**
+ * Cached, because this is read in the storefront layout.
+ *
+ * An uncached read there opts every page under that layout out of static
+ * rendering - including /privacy and /terms, which have no data at all. Only
+ * public measurement IDs come back, so nothing secret is cached.
+ */
+export const getAnalyticsConfig = cachedRead(
+  getAnalyticsConfigUncached,
+  ['getAnalyticsConfig'],
+  { tags: [TAGS.config], revalidate: TTL.config }
+)
+

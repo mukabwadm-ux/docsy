@@ -1,6 +1,6 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { assertAdmin } from '@/lib/auth'
@@ -9,6 +9,7 @@ import { createSignedDownloadUrl, describeExpiry } from '@/lib/delivery'
 import { EMAIL_SETUP_HINT, isEmailConfigured, sendDeliveryEmail } from '@/lib/email'
 import { fileTypeLabel } from '@/lib/format'
 import { one, slugify } from '@/lib/utils'
+import { TAGS } from '@/lib/cache'
 
 export interface ActionState {
   status: 'idle' | 'success' | 'error'
@@ -34,6 +35,21 @@ function revalidateStorefront(slug?: string) {
   revalidatePath('/')
   revalidatePath('/products')
   if (slug) revalidatePath(`/products/${slug}`)
+
+  /**
+   * The paths above drop the rendered HTML; these drop the cached queries behind
+   * it. Both are needed — revalidatePath does not touch the data cache, so
+   * without this a re-render would just read the same stale rows back and the
+   * change would appear to have been ignored for up to the read's TTL.
+   *
+   * Every tag goes at once rather than being matched to the specific mutation.
+   * This is the one funnel all storefront-affecting writes pass through, and the
+   * cost of clearing a little extra is a few queries on the next request, against
+   * the cost of a missed tag being a change the owner cannot see.
+   */
+  revalidateTag(TAGS.products)
+  revalidateTag(TAGS.categories)
+  revalidateTag(TAGS.reviews)
 }
 
 // ============================================================ file uploads
