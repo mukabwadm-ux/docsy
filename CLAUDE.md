@@ -75,6 +75,25 @@ These were tested on 2026-08-11, not assumed. Re-check before contradicting them
 - **`rating_avg`/`rating_count` are denormalised onto products.** Not in the original spec,
   but the catalog cards show stars and can sort by rating; computing that per card would
   make every grid an N+1. A trigger keeps them true.
+- **The storefront's speed depends on nothing reading cookies.** In Next 14 a single
+  `cookies()` call anywhere in a route's tree makes the whole route render on demand,
+  and `Cache-Control` becomes `no-store` — no CDN, a fresh render and fresh Supabase
+  queries in eu-central-1 for every visitor. This is easy to reintroduce by accident:
+  the product page once read the buyer session just to fill in the wishlist heart, and
+  that one call cost the page its prerendering. The heart now resolves itself client-side
+  from `/api/wishlist`. If a storefront page needs per-visitor data, fetch it from the
+  client rather than in the server render.
+- **Layout reads are the other trap, and they hit every page.** `SiteHeader` and
+  `Analytics` both read the database. An uncached read in a layout makes every route
+  beneath it dynamic — that is why `/privacy` and `/terms`, which have no data at all,
+  were once served `no-store`. Those reads go through `src/lib/cache.ts`; keep any new
+  layout-level read wrapped the same way.
+- **`revalidatePath` does not clear the data cache.** It drops rendered HTML; the cached
+  queries behind it survive, so a re-render reads the same stale rows back and the save
+  looks ignored. `revalidateStorefront` in `src/actions/admin.ts` therefore calls
+  `revalidateTag` for every tag as well. It clears all of them rather than matching tags
+  to each mutation, deliberately: it is the one funnel every storefront write passes
+  through, and a missed tag is a change the owner cannot see.
 - **Three of Sokofy's later bug-fix migrations are folded into Docsy's first four.** Column
   grants, NOT NULL counters, and the `search_vector` grant were each a production bug there;
   they are in the initial schema here. The comments in the migrations explain each one.
