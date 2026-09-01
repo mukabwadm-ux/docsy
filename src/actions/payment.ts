@@ -35,11 +35,24 @@ export async function startPayment(
     return { status: 'error', message: 'That checkout link is not valid.' }
   }
 
-  if (!(await isPaystackConfigured())) {
+  /**
+   * Fetched together rather than in sequence.
+   *
+   * Neither depends on the other, and this runs while the buyer is staring at a
+   * spinner having already decided to pay — the slowest possible moment to spend
+   * an avoidable round trip. The key check is free (it resolves from the
+   * environment), so the saving is the rate lookup overlapping the order read.
+   */
+  const [configured, checkout, rates] = await Promise.all([
+    isPaystackConfigured(),
+    getCheckout(token),
+    getRates(),
+  ])
+
+  if (!configured) {
     return { status: 'error', message: PAYSTACK_SETUP_HINT }
   }
 
-  const checkout = await getCheckout(token)
   if (!checkout) return { status: 'error', message: 'We could not find that order.' }
   if (checkout.expired) {
     return { status: 'error', message: 'This checkout has expired. Please start again.' }
@@ -65,7 +78,6 @@ export async function startPayment(
    * The buyer still SEES the price in their own currency: `amount`/`currency` on
    * the order stay exactly as displayed, and only the charge is converted.
    */
-  const rates = await getRates()
   const chargeCurrency = 'KES' as const
   const chargeAmount =
     checkout.order.currency === 'KES' ? amount : convert(amount, 'KES', rates)
@@ -159,12 +171,20 @@ export async function confirmPayment(token: string): Promise<{ paid: boolean; me
     return { paid: false, message: `Paystack reports the payment as ${verified.charge.status}.` }
   }
 
-  const result = await fulfilPaidOrder({
-    reference: verified.charge.reference,
-    amount: verified.charge.amount,
-    currency: verified.charge.currency,
-    meta: verified.charge.raw,
-  })
+  /**
+   * The buyer is watching the checkout page render right now, so the payment is
+   * recorded before returning and the download email follows the response. The
+   * webhook path deliberately does not defer - nothing is waiting on it there.
+   */
+  const result = await fulfilPaidOrder(
+    {
+      reference: verified.charge.reference,
+      amount: verified.charge.amount,
+      currency: verified.charge.currency,
+      meta: verified.charge.raw,
+    },
+    { deferDelivery: true }
+  )
 
   /**
    * A mismatch is not a completed purchase. Paystack says money moved, so the

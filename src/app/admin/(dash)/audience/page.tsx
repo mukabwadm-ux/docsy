@@ -59,7 +59,7 @@ export default async function AudiencePage({
   const shown =
     segment === 'purchased' ? purchasers : segment === 'no-purchase' ? nonPurchasers : rows
 
-  const emailReady = isEmailConfigured()
+  const emailReady = await isEmailConfigured()
 
   return (
     <>

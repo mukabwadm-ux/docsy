@@ -59,7 +59,7 @@ export async function sendOrderConfirmation(checkoutToken: string): Promise<
     await db.from('manual_orders').update({ user_id: account.userId }).eq('id', row.id)
   }
 
-  if (!isEmailConfigured()) {
+  if (!(await isEmailConfigured())) {
     // The account and the link still exist; only the sending is unavailable.
     return { ok: false, error: 'Email is not configured, so no confirmation was sent.' }
   }

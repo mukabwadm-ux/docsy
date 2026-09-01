@@ -91,7 +91,7 @@ export async function requestAccessLink(
     message: `If there is a Docsy account for ${email}, a sign-in link is on its way.`,
   }
 
-  if (!isEmailConfigured()) {
+  if (!(await isEmailConfigured())) {
     return { status: 'error', message: 'Email is not configured yet, so links cannot be sent.' }
   }
 

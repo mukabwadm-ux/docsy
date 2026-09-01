@@ -6,6 +6,7 @@ import { isEmailConfigured, sendEmail } from './email'
 import { deliveryEmail } from './email-templates'
 import { fileTypeLabel } from './format'
 import { one } from './utils'
+import { afterResponse } from './after'
 
 export interface FulfilResult {
   /** True only for the call that actually made the transition. */
@@ -35,12 +36,24 @@ export interface FulfilResult {
  * queue, which is a visible problem someone can fix. The reverse — a file sent
  * against a payment we failed to record — is invisible and unfixable.
  */
-export async function fulfilPaidOrder(input: {
-  reference: string
-  amount: number
-  currency: string
-  meta?: Record<string, unknown>
-}): Promise<FulfilResult> {
+export async function fulfilPaidOrder(
+  input: {
+    reference: string
+    amount: number
+    currency: string
+    meta?: Record<string, unknown>
+  },
+  /**
+   * When set, the payment is recorded before returning but the download email is
+   * finished after the response.
+   *
+   * Used by the redirect path, where a buyer is watching a page render: an SMTP
+   * send is about five seconds, and making them wait for a message they will read
+   * in another tab is the slowest part of paying. The webhook leaves this off - no
+   * one is waiting there, and its result should reflect what actually happened.
+   */
+  options?: { deferDelivery?: boolean }
+): Promise<FulfilResult> {
   const db = createAdminClient()
 
   const { data: outcome, error } = await db.rpc('mark_order_paid', {
@@ -80,10 +93,34 @@ export async function fulfilPaidOrder(input: {
     return { transitioned: false, delivered: false, message: 'Already recorded.' }
   }
 
+  if (options?.deferDelivery) {
+    afterResponse(deliverPaidOrder(input.reference).catch(() => undefined))
+    return {
+      transitioned: true,
+      // Not yet delivered, and deliberately not claimed as such: the send is still
+      // in flight, and the order's own status is what settles it either way.
+      delivered: false,
+      message: 'Payment recorded. The download email is on its way.',
+    }
+  }
+
+  return deliverPaidOrder(input.reference)
+}
+
+/**
+ * Sends the file for an order already recorded as paid.
+ *
+ * Split from the transition so the two can run at different times: recording the
+ * payment must finish before anything is reported to the buyer, while the email
+ * can follow the response.
+ */
+async function deliverPaidOrder(reference: string): Promise<FulfilResult> {
+  const db = createAdminClient()
+
   const { data } = await db
     .from('manual_orders')
     .select('id, buyer_email, buyer_name, status, products ( title, file_url, file_type )')
-    .eq('payment_reference', input.reference)
+    .eq('payment_reference', reference)
     .maybeSingle()
 
   if (!data) {
@@ -108,7 +145,7 @@ export async function fulfilPaidOrder(input: {
     }
   }
 
-  if (!isEmailConfigured()) {
+  if (!(await isEmailConfigured())) {
     return {
       transitioned: true,
       delivered: false,

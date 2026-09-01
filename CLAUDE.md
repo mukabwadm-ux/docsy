@@ -108,6 +108,20 @@ These were tested on 2026-08-11, not assumed. Re-check before contradicting them
   like an infrastructure problem rather than a settings one.
   Do **not** "fix" that error by creating an empty `public/` directory — that deploys the
   empty directory as a static site instead of the application.
+- **Functions run in `fra1`, pinned in `vercel.json`.** Vercel defaults to `iad1`
+  (Washington DC) while Supabase is in `eu-central-1` (Frankfurt), so every query on
+  a dynamic route crossed the Atlantic — checkout makes several in sequence, and the
+  page took ~1.2s warm from Kenya (`x-vercel-id` read `cpt1::iad1`). Putting the
+  functions beside the database turns each query into a LAN hop. Buyers are in Kenya
+  and Nairobi is closer to Frankfurt than to Washington, so this helps both legs. If
+  the Supabase project ever moves region, move this with it.
+- **Email never blocks a response.** An SMTP send is about five seconds. Both the
+  order confirmation and the post-payment download email used to be awaited while
+  the buyer watched a spinner. They now go through `afterResponse` in
+  `src/lib/after.ts`, which is `waitUntil` — not a loose promise, because a
+  serverless function can be torn down the moment it responds and the email would
+  vanish some fraction of the time. The webhook path still awaits delivery: nobody
+  is waiting there, and its result should say what actually happened.
 - Only four environment variables are needed in Vercel:
   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
   `SUPABASE_SECRET_KEY`, `NEXT_PUBLIC_SITE_URL`. `DATABASE_URL` and `DIRECT_URL` are read

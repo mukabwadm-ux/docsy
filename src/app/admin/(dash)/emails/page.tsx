@@ -20,6 +20,10 @@ export default async function EmailsPage() {
   const transactional = samples.filter((s) => s.kind === 'transactional')
   const campaigns = samples.filter((s) => s.kind === 'campaign')
 
+  // Hoisted and awaited: isEmailConfigured returns a promise, and a promise is
+  // always truthy, so calling it inline made this banner permanently invisible.
+  const emailConfigured = await isEmailConfigured()
+
   return (
     <>
       <PageHeader
@@ -27,7 +31,7 @@ export default async function EmailsPage() {
         subtitle="Every message the shop sends, with the brand and typography from the site."
       />
 
-      {!isEmailConfigured() && (
+      {!emailConfigured && (
         <div className="mb-6 rounded-lg border border-brand-tan bg-brand-cream p-4">
           <p className="font-heading text-sm font-bold uppercase tracking-wide text-brand-heading">
             Nothing can send yet

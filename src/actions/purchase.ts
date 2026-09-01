@@ -6,6 +6,7 @@ import { cookies, headers } from 'next/headers'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendOrderConfirmation } from '@/lib/order-email'
 import { CURRENCY_COOKIE, convert, getRates, resolveCurrency } from '@/lib/currency'
+import { afterResponse } from '@/lib/after'
 
 /**
  * Opens a checkout and sends the buyer to it.
@@ -127,16 +128,23 @@ export async function requestPurchase(
   }
 
   /**
-   * Create the account and send the receipt before redirecting.
+   * Create the account and send the receipt, but do not make the buyer wait.
    *
-   * Awaited, not fired loose: an unawaited promise in a server action can be cut
-   * short when the response is sent, which would leave an order with no
-   * confirmation and no account. A failure here is deliberately not surfaced to
-   * the buyer — their order exists and is visible in the admin queue, so the
-   * recoverable outcome is to show them the checkout page rather than an error
-   * that makes them think the purchase failed.
+   * This was awaited, and an SMTP send takes about five seconds — five seconds of
+   * spinner between pressing the button and reaching the payment page, for an
+   * email they open later in another tab. Nothing on the checkout page depends on
+   * it having been sent.
+   *
+   * It is handed to afterResponse rather than fired loose. An unawaited promise in
+   * a server action really can be cut short when the response is sent, which was
+   * the original reason for awaiting it; afterResponse keeps the invocation alive
+   * until the send settles, so the message is not traded away for the speed.
+   *
+   * A failure is still not surfaced to the buyer: their order exists and is
+   * visible in the admin queue, so the recoverable outcome is the checkout page
+   * rather than an error suggesting the purchase failed.
    */
-  await sendOrderConfirmation(token).catch(() => undefined)
+  afterResponse(sendOrderConfirmation(token).catch(() => undefined))
 
   // redirect() throws, so it must sit outside the try/catch above and be the
   // last thing this action does.
