@@ -103,6 +103,13 @@ const STATUS_STYLES: Record<string, string> = {
   pending: 'bg-amber-50 text-amber-800 border-amber-200',
   rejected: 'bg-red-50 text-red-700 border-red-200',
   delivered: 'bg-green-50 text-green-800 border-green-200',
+  paid: 'bg-green-50 text-green-800 border-green-200',
+  unpaid: 'bg-gray-100 text-gray-600 border-gray-200',
+  failed: 'bg-red-50 text-red-700 border-red-200',
+  refunded: 'bg-gray-100 text-gray-600 border-gray-200',
+  // Money arrived but did not cover the order, so nothing was delivered. Red
+  // rather than amber: this needs a decision, not a wait.
+  mismatch: 'bg-red-50 text-red-700 border-red-200',
 }
 
 export function StatusPill({ status }: { status: string }) {

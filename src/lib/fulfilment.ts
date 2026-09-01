@@ -12,6 +12,12 @@ export interface FulfilResult {
   transitioned: boolean
   delivered: boolean
   message: string
+  /**
+   * Set when the settled amount did not cover what the order expected. The money
+   * arrived but the file is deliberately withheld, so this has to be
+   * distinguishable from an ordinary duplicate webhook by every caller.
+   */
+  mismatch?: boolean
 }
 
 /**
@@ -37,7 +43,7 @@ export async function fulfilPaidOrder(input: {
 }): Promise<FulfilResult> {
   const db = createAdminClient()
 
-  const { data: transitioned, error } = await db.rpc('mark_order_paid', {
+  const { data: outcome, error } = await db.rpc('mark_order_paid', {
     p_reference: input.reference,
     p_amount: input.amount,
     p_currency: input.currency,
@@ -47,6 +53,27 @@ export async function fulfilPaidOrder(input: {
   if (error) {
     return { transitioned: false, delivered: false, message: `Could not record payment: ${error.message}` }
   }
+
+  /**
+   * The paid amount did not cover the order. The order is now flagged for review
+   * and nothing is delivered - reporting this as a duplicate, which the previous
+   * boolean return forced, would have hidden exactly the case worth seeing.
+   */
+  if (outcome === 'mismatch') {
+    return {
+      transitioned: false,
+      delivered: false,
+      mismatch: true,
+      message:
+        'Payment did not match the amount owed. The order is flagged for review and nothing was sent.',
+    }
+  }
+
+  if (outcome === 'not_found') {
+    return { transitioned: false, delivered: false, message: 'No order carries that reference.' }
+  }
+
+  const transitioned = outcome === 'paid'
 
   if (!transitioned) {
     // Already settled by the other path. Nothing to do, and nothing wrong.

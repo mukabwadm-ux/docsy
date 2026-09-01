@@ -17,7 +17,8 @@
     "campaign:test": "node scripts/campaign-test.mjs",
     "config:test": "node scripts/config-test.mjs",
     "bcc:test": "node scripts/bcc-test.mjs",
-    "mail:diagnose": "node scripts/mail-diagnose.mjs"
+    "mail:diagnose": "node scripts/mail-diagnose.mjs",
+    "guard:test": "node scripts/charge-guard-test.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.23",

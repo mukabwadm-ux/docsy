@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCheckout } from '@/lib/checkout'
+import { convert, getRates } from '@/lib/currency'
 import { fulfilPaidOrder } from '@/lib/fulfilment'
 import {
   buildReference,
@@ -52,6 +53,27 @@ export async function startPayment(
     return { status: 'error', message: 'This order has no amount to charge.' }
   }
 
+  /**
+   * Everything is collected in KES.
+   *
+   * The account settles in Kenya, where USD has to be enabled separately; without
+   * it Paystack rejects a USD charge outright with "Currency not supported by
+   * merchant" - at the payment step, after the buyer has committed. Charging the
+   * shilling equivalent always works, and a foreign card converts at the network's
+   * own rate.
+   *
+   * The buyer still SEES the price in their own currency: `amount`/`currency` on
+   * the order stay exactly as displayed, and only the charge is converted.
+   */
+  const rates = await getRates()
+  const chargeCurrency = 'KES' as const
+  const chargeAmount =
+    checkout.order.currency === 'KES' ? amount : convert(amount, 'KES', rates)
+
+  if (chargeAmount <= 0) {
+    return { status: 'error', message: 'This order has no amount to charge.' }
+  }
+
   const db = createAdminClient()
   const reference = buildReference(checkout.order.id)
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
@@ -70,6 +92,10 @@ export async function startPayment(
       payment_provider: 'paystack',
       payment_reference: reference,
       payment_status: 'pending',
+      // What the gateway is being asked for. mark_order_paid compares the settled
+      // amount against this before releasing the file.
+      charge_amount: chargeAmount,
+      charge_currency: chargeCurrency,
     })
     .eq('id', checkout.order.id)
 
@@ -79,8 +105,8 @@ export async function startPayment(
 
   const init = await initializeTransaction({
     email: checkout.order.buyer_email,
-    amount,
-    currency: checkout.order.currency === 'KES' ? 'KES' : 'USD',
+    amount: chargeAmount,
+    currency: chargeCurrency,
     reference,
     callbackUrl: `${siteUrl}/checkout/${token}?verify=1`,
     metadata: {
@@ -139,6 +165,20 @@ export async function confirmPayment(token: string): Promise<{ paid: boolean; me
     currency: verified.charge.currency,
     meta: verified.charge.raw,
   })
+
+  /**
+   * A mismatch is not a completed purchase. Paystack says money moved, so the
+   * charge did succeed — but it did not cover the order, nothing was delivered,
+   * and telling the buyer "payment confirmed" would promise a file that is never
+   * coming. The order is flagged in the admin queue for a person to settle.
+   */
+  if (result.mismatch) {
+    return {
+      paid: false,
+      message:
+        'We received a payment, but it does not match the amount for this order. Nothing has been charged again — we are looking into it and will email you.',
+    }
+  }
 
   return { paid: true, message: result.message }
 }
