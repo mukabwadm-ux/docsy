@@ -11,7 +11,23 @@ import { createClient } from '@supabase/supabase-js'
  * Every call site must do its own authorisation check first — see requireAdmin()
  * in src/lib/auth.ts.
  */
-export function createAdminClient() {
+export function createAdminClient(options?: {
+  /**
+   * Drop the `no-store` override below, for a caller that is itself inside
+   * `unstable_cache`.
+   *
+   * Required there, not merely preferable: `unstable_cache` refuses to run a
+   * `no-store` fetch and fails it with "Dynamic server usage". supabase-js turns
+   * that into `{ data: null, error }` rather than throwing, so a caller that
+   * ignores `error` sees an empty result and carries on — which is how every
+   * database-backed config value silently became null once the analytics read was
+   * wrapped in a cache.
+   *
+   * Only pass this for data whose freshness is governed by the surrounding
+   * cache's tags and TTL. Never for orders, buyer records or admin state.
+   */
+  cacheable?: boolean
+}) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SECRET_KEY
 
@@ -25,6 +41,12 @@ export function createAdminClient() {
       `Supabase admin client is not configured: ${missing} is not set. ` +
         'On Vercel, add it under Settings → Environment Variables and redeploy.'
     )
+  }
+
+  if (options?.cacheable) {
+    return createClient(url, key, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
   }
 
   return createClient(url, key, {

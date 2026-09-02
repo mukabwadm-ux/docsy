@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { cache } from 'react'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAdminClient } from './supabase/admin'
 import { decryptSecret, encryptSecret, isEncryptionConfigured, maskSecret } from './secret-box'
 import { CONFIG_FIELDS, isKnownConfigKey, isSecretKey } from './config-registry'
@@ -31,15 +32,44 @@ export interface ResolvedConfig {
  * this, that would be a database round trip per page. React's cache() dedupes it
  * within a single render pass.
  */
-const loadRows = cache(async (): Promise<Map<string, { value: string; is_secret: boolean }>> => {
-  const { data } = await createAdminClient().from('app_config').select('key, value, is_secret')
+type ConfigRows = Map<string, { value: string; is_secret: boolean }>
 
-  const map = new Map<string, { value: string; is_secret: boolean }>()
+/**
+ * Reads the config table with a given client.
+ *
+ * The error is logged rather than dropped. Swallowing it is what made a real
+ * outage invisible: when the analytics read was first wrapped in a cache, every
+ * query here began failing with "Dynamic server usage" and this returned an empty
+ * map, so all database-backed config quietly resolved to null and the storefront
+ * simply stopped rendering its pixels with no sign of why.
+ */
+async function readConfigRows(client: SupabaseClient): Promise<ConfigRows> {
+  const { data, error } = await client.from('app_config').select('key, value, is_secret')
+
+  if (error) {
+    console.error(`[config] could not read app_config: ${error.message}`)
+  }
+
+  const map: ConfigRows = new Map()
   for (const row of (data as { key: string; value: string | null; is_secret: boolean }[]) ?? []) {
     if (row.value) map.set(row.key, { value: row.value, is_secret: row.is_secret })
   }
   return map
-})
+}
+
+const loadRows = cache((): Promise<ConfigRows> => readConfigRows(createAdminClient()))
+
+/**
+ * The same read, for callers already inside `unstable_cache`.
+ *
+ * A cached caller must not use the default client: it forces `no-store`, which
+ * `unstable_cache` refuses to run. Freshness here comes from the surrounding
+ * cache's tag and TTL instead — see getAnalyticsConfig below, which the
+ * settings form invalidates on save.
+ */
+function loadRowsCacheable(): Promise<ConfigRows> {
+  return readConfigRows(createAdminClient({ cacheable: true }))
+}
 
 /** One resolved value, decrypting if needed. Never throws. */
 export async function getConfig(key: string): Promise<string | null> {
@@ -176,17 +206,35 @@ export async function setConfig(
 
 /** Analytics IDs for the storefront. Public by nature. */
 async function getAnalyticsConfigUncached() {
-  const c = await getConfigMany([
-    'analytics.ga4_id',
-    'analytics.gtm_id',
-    'analytics.meta_pixel_id',
-    'analytics.tiktok_pixel_id',
-  ])
+  /**
+   * Reads the rows directly, through the cacheable client.
+   *
+   * Deliberately not via getConfigMany: that path uses the default admin client,
+   * whose forced `no-store` cannot run inside the cache this function sits in.
+   * Going through it returned nothing at all, which is what stopped the pixels
+   * rendering.
+   *
+   * These four keys have no environment fallback in the registry, so the table is
+   * the only source and there is no precedence to honour.
+   */
+  const rows = await loadRowsCacheable().catch((err) => {
+    console.error(`[config] analytics read failed: ${err?.message ?? err}`)
+    return new Map() as ConfigRows
+  })
+
+  const read = (key: string): string | null => {
+    const row = rows.get(key)
+    if (!row) return null
+    // None of these are secret today, but a row marked secret must never be
+    // handed to a browser as ciphertext.
+    return row.is_secret ? decryptSecret(row.value) : row.value
+  }
+
   return {
-    ga4: c['analytics.ga4_id'],
-    gtm: c['analytics.gtm_id'],
-    metaPixel: c['analytics.meta_pixel_id'],
-    tiktokPixel: c['analytics.tiktok_pixel_id'],
+    ga4: read('analytics.ga4_id'),
+    gtm: read('analytics.gtm_id'),
+    metaPixel: read('analytics.meta_pixel_id'),
+    tiktokPixel: read('analytics.tiktok_pixel_id'),
   }
 }
 
